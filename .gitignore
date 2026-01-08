@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Airflow
+logs/
+airflow.db
+airflow.cfg
+webserver_config.py
+
+# Docker
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporal
+.temporal/
+
+# Ansible
+*.retry
+
+# Backup and temporary files
+Backup/
+*.bak
+*.tmp
+*~
+
+# Shared folders (legacy)
+shared/
+simulated_devices/
+ansible_playbooks/
+airflow_dags/

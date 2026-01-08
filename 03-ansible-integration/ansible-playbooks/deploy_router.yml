@@ -1,0 +1,43 @@
+---
+- name: Deploy Virtual Router Container
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  
+  vars:
+    router_name: "{{ router_id | default('virtual-router-001') }}"
+    router_image: "frrouting/frr:latest"
+    
+  tasks:
+    - name: Remove existing router container
+      shell: "docker rm -f {{ router_name }}"
+      ignore_errors: true
+      
+    - name: Pull router image
+      shell: "docker pull {{ router_image }}"
+      
+    - name: Deploy router container
+      shell: >
+        docker run -d
+        --name {{ router_name }}
+        --privileged
+        -p 2601:2601
+        {{ router_image }}
+      register: container_result
+      
+    - name: Wait for router to be ready
+      wait_for:
+        timeout: 5
+        
+    - name: Verify container is running
+      shell: "docker ps --filter name={{ router_name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
+      register: container_check
+      
+    - name: Display deployment results
+      debug:
+        msg:
+          - "Router deployed successfully!"
+          - "Container Name: {{ router_name }}"
+          - "Container ID: {{ container_result.stdout }}"
+          - "Status: Running" 
+      when: router_name in container_check.stdout

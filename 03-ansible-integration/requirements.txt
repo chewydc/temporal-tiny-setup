@@ -1,0 +1,4 @@
+temporalio==1.2.0
+httpx==0.24.1
+dataclasses-json==0.6.7
+ansible==8.7.0
