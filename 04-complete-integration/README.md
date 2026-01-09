@@ -73,6 +73,12 @@ docker-compose up -d
 
 ### 2. Instalar Dependencias
 ```bash
+python -m venv env
+```
+```bash
+.\env\Scripts\activate
+```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -92,7 +98,7 @@ python run_deployment.py
 2. **Verifica conectividad parcial**:
    ```bash
    docker exec test-client ping -c 1 192.168.200.10     # ✅ Debe funcionar
-   docker exec test-client wget -q -O - http://192.168.200.10  # ❌ Debe fallar
+   docker exec test-client wget -O - http://192.168.200.10 --timeout=5 --tries=1  # ❌ Debe fallar
    ```
 3. **Desde Temporal Web UI** (http://localhost:8233):
    - Ve a **Workflows** → Busca tu workflow
