@@ -168,6 +168,11 @@ class NetworkActivitiesWithConnectivity:
             
             print("Contenedor ansible-runner encontrado")
             
+            # Verificar si el router ya existe y eliminarlo
+            cleanup_cmd = ["docker", "rm", "-f", request.router_id]
+            subprocess.run(cleanup_cmd, capture_output=True)
+            print(f"Limpieza previa del router {request.router_id}")
+            
             ansible_cmd = [
                 "docker", "exec", "ansible-runner",
                 "ansible-playbook", "/runner/project/deploy_router.yml",
@@ -188,10 +193,13 @@ class NetworkActivitiesWithConnectivity:
             
             if result.returncode == 0:
                 print("Ansible playbook ejecutado exitosamente")
+                print(f"STDOUT: {result.stdout}")
                 return {"success": True, "output": result.stdout}
             else:
-                print(f"Ansible playbook fallo: {result.stderr}")
-                return {"success": False, "error": result.stderr}
+                print(f"Ansible playbook fallo con codigo: {result.returncode}")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
+                return {"success": False, "error": f"RC:{result.returncode} STDOUT:{result.stdout} STDERR:{result.stderr}"}
                 
         except Exception as e:
             return {"success": False, "error": str(e)}

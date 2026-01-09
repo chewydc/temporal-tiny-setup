@@ -45,5 +45,4 @@ Backup/
 # Shared folders (legacy)
 shared/
 simulated_devices/
-ansible_playbooks/
-airflow_dags/
+

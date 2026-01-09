@@ -48,8 +48,12 @@ class NetworkDeploymentWithConnectivity:
                         start_to_close_timeout=timedelta(minutes=5)
                     )
                     
+                    # Verificar si PING funciona
+                    ping_works = any(test.get('test_type') == 'ping' and test.get('success', False) 
+                                   for test in post_router_test.get('tests', []))
+                    
                     # Si PING falla, retry router deployment
-                    if not post_router_test.get('ping_success', False):
+                    if not ping_works:
                         workflow.logger.warning(f"❌ PING falló - Retry router {router_attempt + 1}/{max_router_retries}")
                         if router_attempt < max_router_retries - 1:
                             continue
@@ -84,6 +88,10 @@ class NetworkDeploymentWithConnectivity:
                         start_to_close_timeout=timedelta(minutes=15)
                     )
                     
+                    # Esperar que Airflow procese el DAG
+                    workflow.logger.info("⏳ Esperando que Airflow procese el DAG...")
+                    await asyncio.sleep(30)  # Dar tiempo a Airflow
+                    
                     # Test final
                     final_test = await workflow.execute_activity(
                         "test_client_server_connectivity",
@@ -91,10 +99,18 @@ class NetworkDeploymentWithConnectivity:
                         start_to_close_timeout=timedelta(minutes=5)
                     )
                     
+                    # Verificar conectividad
+                    ping_works = any(test.get('test_type') == 'ping' and test.get('success', False) 
+                                   for test in final_test.get('tests', []))
+                    http_works = any(test.get('test_type') == 'http' and test.get('success', False) 
+                                   for test in final_test.get('tests', []))
+                    
                     # Si HTTP falla pero PING funciona, retry solo Airflow
-                    if final_test.get('ping_success', False) and not final_test.get('http_success', False):
+                    if ping_works and not http_works:
                         workflow.logger.warning(f"❌ HTTP falló - Retry Airflow {airflow_attempt + 1}/{max_airflow_retries}")
                         if airflow_attempt < max_airflow_retries - 1:
+                            workflow.logger.info("⏳ Esperando 60s antes del siguiente intento...")
+                            await asyncio.sleep(60)  # Esperar más tiempo entre retries
                             continue
                         else:
                             workflow.logger.error("Airflow configuration failed after all retries")
@@ -105,7 +121,8 @@ class NetworkDeploymentWithConnectivity:
                     
                 except Exception as e:
                     if airflow_attempt < max_airflow_retries - 1:
-                        workflow.logger.warning(f"Airflow deployment failed, retrying... {e}")
+                        workflow.logger.warning(f"Airflow deployment failed, retrying in 60s... {e}")
+                        await asyncio.sleep(60)  # Esperar antes del retry
                         continue
                     workflow.logger.error(f"Airflow failed after all retries: {e}")
                     # Hacer un test final para el reporte
