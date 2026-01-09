@@ -89,8 +89,8 @@ class NetworkDeploymentWithConnectivity:
                     )
                     
                     # Esperar que Airflow procese el DAG
-                    workflow.logger.info("⏳ Esperando que Airflow procese el DAG...")
-                    await asyncio.sleep(30)  # Dar tiempo a Airflow
+                    # workflow.logger.info("⏳ Esperando que Airflow procese el DAG...")
+                    # await asyncio.sleep(30)  # Dar tiempo a Airflow - YA NO NECESARIO
                     
                     # Test final
                     final_test = await workflow.execute_activity(

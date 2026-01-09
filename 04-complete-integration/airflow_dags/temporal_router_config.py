@@ -53,6 +53,10 @@ configure_firewall_http = BashOperator(
     # Obtener router_id del contexto
     ROUTER_ID="{{ dag_run.conf.router_id }}"
     
+    # DEMO: Simular tarea larga para poder interrumpir
+    echo "🕐 Iniciando configuración lenta para demo..."
+    sleep 15  # 15 segundos para poder interrumpir
+    
     # Verificar que el router existe
     if docker ps --filter "name=$ROUTER_ID" --format "{{ '{{' }}.Names{{ '}}' }}" | grep -q "$ROUTER_ID"; then
         echo "✅ Router $ROUTER_ID encontrado"

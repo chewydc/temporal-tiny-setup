@@ -267,7 +267,7 @@ class NetworkActivitiesWithConnectivity:
     
     @activity.defn
     async def deploy_router_software(self, request: NetworkDeploymentRequest) -> str:
-        """Despliega software usando Airflow API (basado en Caso 3)"""
+        """Despliega software usando Airflow API y espera finalización"""
         
         print("\n" + "="*80)
         print("AIRFLOW: Configurando Software en Router")
@@ -307,8 +307,20 @@ class NetworkActivitiesWithConnectivity:
                     dag_run_id = dag_run_info["dag_run_id"]
                     
                     print(f"DAG TRIGGERED: {dag_run_id}")
-                    print("="*80)
-                    return f"Software {request.software_version} configured on {request.router_id} via DAG {dag_run_id}"
+                    print("⏳ Esperando finalización del DAG...")
+                    
+                    # NUEVO: Esperar finalización del DAG
+                    final_state = await self._wait_for_dag_completion(client, airflow_url, dag_id, dag_run_id)
+                    
+                    if final_state == "success":
+                        print(f"✅ DAG completado exitosamente: {dag_run_id}")
+                        print("="*80)
+                        return f"Software {request.software_version} configured on {request.router_id} via DAG {dag_run_id}"
+                    else:
+                        error_msg = f"DAG failed with state: {final_state}"
+                        print(f"❌ {error_msg}")
+                        print("="*80)
+                        raise Exception(error_msg)
                 else:
                     error_msg = f"Airflow DAG trigger failed: {response.status_code} - {response.text}"
                     print(f"{error_msg}")
@@ -319,6 +331,48 @@ class NetworkActivitiesWithConnectivity:
             print(f"AIRFLOW FALLO: {str(e)}")
             print("="*80)
             raise Exception(f"Airflow integration failed: {str(e)}")
+    
+    async def _wait_for_dag_completion(self, client, airflow_url: str, dag_id: str, dag_run_id: str, max_wait_minutes: int = 10) -> str:
+        """Espera a que el DAG complete y retorna el estado final"""
+        
+        status_url = f"{airflow_url}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}"
+        max_attempts = max_wait_minutes * 6  # Check every 10 seconds
+        
+        for attempt in range(max_attempts):
+            try:
+                response = await client.get(
+                    status_url,
+                    auth=("admin", "admin")
+                )
+                
+                if response.status_code == 200:
+                    dag_run = response.json()
+                    state = dag_run.get("state")
+                    
+                    print(f"📊 DAG State: {state} (attempt {attempt + 1}/{max_attempts})")
+                    
+                    if state in ["success", "failed"]:
+                        return state
+                    elif state in ["running", "queued"]:
+                        await asyncio.sleep(10)  # Wait 10 seconds
+                        continue
+                    else:
+                        print(f"⚠️ Unknown DAG state: {state}")
+                        await asyncio.sleep(10)
+                        continue
+                else:
+                    print(f"❌ Error checking DAG status: {response.status_code}")
+                    await asyncio.sleep(10)
+                    continue
+                    
+            except Exception as e:
+                print(f"⚠️ Error polling DAG status: {str(e)}")
+                await asyncio.sleep(10)
+                continue
+        
+        # Timeout reached
+        print(f"⏰ Timeout waiting for DAG completion after {max_wait_minutes} minutes")
+        return "timeout"
     
     @activity.defn
     async def generate_deployment_report(self, data: dict) -> DeploymentResult:
