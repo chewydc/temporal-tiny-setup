@@ -101,3 +101,135 @@ TEMPORAL:
 └─────────────┘    └─────────────┘    └─────────────┘
 
 RESULTADO: TODO es escalable, sin SPOF
+
+
+DATABASE SCALING - ELIMINANDO EL ÚLTIMO SPOF:
+===============================================
+
+🔴 POSTGRESQL SINGLE (SPOF):
+┌─────────────┐    ┌─────────────────────┐
+│ Temporal    │    │   PostgreSQL DB     │
+│ Servers     │───▶│   (SPOF)            │
+│ (Escalable) │    │                     │
+└─────────────┘    └─────────────────────┘
+
+❌ PROBLEMA: Si PostgreSQL cae → TODO para
+
+
+🟢 CASSANDRA CLUSTER (Recomendado por Temporal):
+┌─────────────┐    ┌─────────────────────┐
+│ Temporal    │    │ Cassandra Node 1    │
+│ Servers     │───▶│ Cassandra Node 2    │ ◄─── Sharding automático
+│ (Escalable) │    │ Cassandra Node 3    │ ◄─── Replicación 3x
+└─────────────┘    │ Cassandra Node 4    │ ◄─── Sin SPOF
+                   │ Cassandra Node 5    │
+                   └─────────────────────┘
+
+✅ VENTAJA: Sharding automático por namespace/workflow
+✅ VENTAJA: Replicación configurable (RF=3)
+✅ VENTAJA: Puede perder 1-2 nodos sin problemas
+✅ VENTAJA: Escalabilidad horizontal ilimitada
+
+
+🟡 POSTGRESQL CLUSTER (Alternativa):
+┌─────────────┐    ┌─────────────────────┐
+│ Temporal    │    │ PostgreSQL Master   │
+│ Servers     │───▶│ PostgreSQL Slave 1  │ ◄─── Read replicas
+│ (Escalable) │    │ PostgreSQL Slave 2  │ ◄─── Failover manual
+└─────────────┘    │ + PgBouncer/HAProxy │ ◄─── Connection pooling
+                   └─────────────────────┘
+
+⚠️  LIMITACIÓN: Writes solo al master
+⚠️  LIMITACIÓN: Failover más complejo
+
+
+SHARDING EN CASSANDRA:
+=====================
+
+📊 DISTRIBUCIÓN AUTOMÁTICA:
+
+Namespace "production":
+┌─────────────────────────────────────────────────────────┐
+│ Workflows: 1000-2000 → Node 1, 3, 5 (RF=3)           │
+│ Workflows: 2001-3000 → Node 2, 4, 1 (RF=3)           │
+│ Workflows: 3001-4000 → Node 3, 5, 2 (RF=3)           │
+└─────────────────────────────────────────────────────────┘
+
+Namespace "staging":
+┌─────────────────────────────────────────────────────────┐
+│ Workflows: 1-500     → Node 4, 1, 2 (RF=3)           │
+│ Workflows: 501-1000  → Node 5, 2, 3 (RF=3)           │
+└─────────────────────────────────────────────────────────┘
+
+🎯 RESULTADO:
+• Cada workflow se distribuye automáticamente
+• 3 copias de cada dato (Replication Factor = 3)
+• Si Node 1 cae → Node 3 y 5 tienen las copias
+• Temporal servers no notan la diferencia
+
+
+CONFIGURACIÓN RECOMENDADA PARA PRODUCCIÓN:
+==========================================
+
+🏗️ ARQUITECTURA COMPLETA SIN SPOF:
+
+                    ┌─────────────────┐
+                    │  Load Balancer  │ ◄─── HAProxy/ELB (Multi-AZ)
+                    │   (Multi-AZ)    │
+                    └─────────┬───────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Temporal    │    │ Temporal    │    │ Temporal    │ ◄─── Multi-AZ
+│ Server AZ-A │    │ Server AZ-B │    │ Server AZ-C │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+       │                  │                  │
+       └──────────────────┼──────────────────┘
+                          │
+                          ▼
+              ┌─────────────────────┐
+              │ Cassandra Cluster   │ ◄─── Multi-AZ, Multi-Region
+              │ • 5+ Nodes          │
+              │ • RF=3              │
+              │ • Auto-sharding     │
+              │ • Cross-AZ          │
+              └─────────────────────┘
+                          ▲
+       ┌──────────────────┼──────────────────┐
+       │                  │                  │
+       ▼                  ▼                  ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Workers     │    │ Workers     │    │ Workers     │ ◄─── Multi-AZ
+│ AZ-A        │    │ AZ-B        │    │ AZ-C        │      Auto-scaling
+└─────────────┘    └─────────────┘    └─────────────┘
+
+🎯 TOLERANCIA A FALLOS:
+• Puede perder 1 AZ completa
+• Puede perder 2 nodos Cassandra
+• Puede perder múltiples Temporal servers
+• Puede perder múltiples workers
+• CERO downtime en operación normal
+
+
+COMPARACIÓN FINAL - SPOF ANALYSIS:
+==================================
+
+TU AIRFLOW ACTUAL:
+❌ Scheduler (SPOF)
+❌ Redis/Database (SPOF)
+✅ Workers (Escalable)
+
+TEMPORAL BÁSICO:
+✅ Servers (Escalable)
+❌ PostgreSQL (SPOF)
+✅ Workers (Escalable)
+
+TEMPORAL PRODUCCIÓN:
+✅ Servers (Escalable + Multi-AZ)
+✅ Cassandra (Escalable + Multi-AZ + Sharding)
+✅ Workers (Escalable + Multi-AZ)
+✅ Load Balancer (Multi-AZ)
+
+🏆 RESULTADO: CERO SPOF, ESCALABILIDAD ILIMITADA

@@ -14,7 +14,8 @@ class NetworkActivitiesWithConnectivity:
         print(f"\n{'='*80}")
         print(f"CONNECTIVITY TEST: {test_phase.upper()}")
         print(f"{'='*80}")
-        
+
+
         tests = []
         
         # Test 1: Ping desde cliente a servidor

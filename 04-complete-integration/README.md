@@ -16,7 +16,7 @@ ESTADO 1 (Sin conectividad):
      Red Aislada                  Red Aislada
 
 ESTADO 2 (Post-Ansible: PING OK, HTTP BLOQUEADO):
-┌─────────────────┐    ✅🚫   ┌─────────────────┐
+┌─────────────────┐  ✅🚫   ┌─────────────────┐
 │   Cliente       │ ←──────→ │    Servidor     │
 │ 192.168.100.10  │ PING OK  │ 192.168.200.10  │
 │                 │ HTTP NO  │                 │
@@ -26,7 +26,7 @@ ESTADO 2 (Post-Ansible: PING OK, HTTP BLOQUEADO):
            (Solo permite ICMP)
 
 ESTADO 3 (Post-Airflow: PING + HTTP OK):
-┌─────────────────┐    ✅✅   ┌─────────────────┐
+┌─────────────────┐   ✅✅  ┌─────────────────┐
 │   Cliente       │ ←──────→ │    Servidor     │
 │ 192.168.100.10  │ PING+HTTP│ 192.168.200.10  │
 │                 │    OK    │                 │
