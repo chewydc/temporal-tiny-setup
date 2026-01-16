@@ -39,10 +39,8 @@ async def get_workflow_status(workflow_id: str) -> dict:
             "start_time": desc.start_time.isoformat() if desc.start_time else None,
             "execution_time": desc.execution_time.isoformat() if desc.execution_time else None,
             "close_time": desc.close_time.isoformat() if desc.close_time else None,
-            "task_queue": desc.task_queue_name,
-            "history_length": desc.history_length,
-            "memo": desc.memo,
-            "search_attributes": desc.search_attributes
+            "task_queue": getattr(desc, 'task_queue_name', 'N/A'),  # Compatible con versiones antiguas
+            "history_length": desc.history_length
         }
         
         # Si está completado o fallado, obtener resultado/error
@@ -175,7 +173,7 @@ async def main():
     print("  1. Consultar estado de un workflow específico")
     print("  2. Listar workflows fallidos (para análisis de IA)")
     print("  3. Monitorear workflow en tiempo real")
-    print("  4. Exportar para análisis de IA")
+    print("  4. Export data")
     print()
     
     opcion = input("Selecciona opción (1-4): ").strip()
@@ -205,11 +203,9 @@ async def main():
     
     elif opcion == "4":
         workflow_id = input("\nIngresa Workflow ID: ").strip()
-        ai_data = await export_for_ai_analysis(workflow_id)
-        
-        print("\n📤 Datos para IA:\n")
-        print(ai_data)
-        print("\n💡 Copia este JSON y envialo a tu IA para obtener diagnóstico")
+        status = await get_workflow_status(workflow_id)
+        print("\n📤 Export data:\n")
+        print(json.dumps(status, indent=2, default=str))
     
     else:
         print("❌ Opción inválida")

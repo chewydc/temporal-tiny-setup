@@ -288,15 +288,71 @@ python monitor_workflow.py
 3. Monitorear workflow en tiempo real
 4. Exportar datos para análisis de IA
 
+### Flujo Técnico
+
+El monitor se comunica con **Temporal Server vía gRPC** (no REST):
+
+```
+monitor_workflow.py
+       │
+       │ gRPC (puerto 7233)
+       ▼
+Temporal Server
+       │
+       │ SQL
+       ▼
+PostgreSQL/Cassandra
+(historial de workflows)
+```
+
+**Llamadas API principales**:
+
+1. **Conexión**:
+```python
+client = await Client.connect("localhost:7233")
+# Establece conexión gRPC con Temporal Server
+```
+
+2. **Consultar estado**:
+```python
+handle = client.get_workflow_handle(workflow_id)
+desc = await handle.describe()  # Llamada gRPC: DescribeWorkflowExecution
+```
+
+3. **Obtener resultado**:
+```python
+result = await handle.result()  # Llamada gRPC: GetWorkflowExecutionHistory
+```
+
+4. **Listar workflows**:
+```python
+async for workflow in client.list_workflows(query):
+    # Llamada gRPC: ListWorkflowExecutions
+    # Query SQL-like sobre índices de Temporal
+```
+
 **Ejemplo de uso con IA**:
 ```bash
 # 1. Ejecutar monitor
 python monitor_workflow.py
 
-# 2. Seleccionar opción 4 (Exportar para IA)
+# 2. Seleccionar opción 4 (Export data)
 # 3. Copiar el JSON generado
-# 4. Enviarlo a ChatGPT/Claude con:
+# 4. Enviarlo a ChatGPT/Claude:
 #    "Analiza este error de workflow y sugiere solución"
+```
+
+**Caso de uso real**:
+```python
+# Sistema de monitoreo externo
+status = await get_workflow_status("deployment-123")
+
+if status["status"] == "FAILED":
+    # Enviar a IA para diagnóstico automático
+    ai_response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": json.dumps(status)}]}
+    )
 ```
 
 ## 🎯 Valor Demostrado
