@@ -51,8 +51,9 @@ async def simple_tenant_demo():
             "NetworkDeploymentWorkflow",
             request,
             id=workflow_id,
-            task_queue=task_queue,
-            search_attributes={"CustomStringField": [tenant_id]}
+            task_queue=task_queue
+            # Search attributes comentados - requieren configuración
+            # search_attributes={"CustomStringField": [tenant_id]}
         )
         
         print(f"✅ Workflow iniciado!")

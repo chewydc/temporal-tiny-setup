@@ -3,8 +3,14 @@ from datetime import datetime
 from temporalio.client import Client
 from models import NetworkDeploymentRequest
 
-async def deploy_for_tenant(client: Client, tenant_id: str, router_number: int):
-    """Ejecuta un deployment para un tenant específico"""
+async def deploy_for_tenant(tenant_id: str, router_number: int):
+    """Ejecuta un deployment para un tenant específico en su namespace"""
+    
+    # Conectar al namespace del tenant
+    client = await Client.connect(
+        "localhost:7233",
+        namespace=tenant_id  # ⭐ Namespace separado
+    )
     
     deployment_request = NetworkDeploymentRequest(
         tenant_id=tenant_id,
@@ -17,27 +23,20 @@ async def deploy_for_tenant(client: Client, tenant_id: str, router_number: int):
         }
     )
     
-    # Workflow ID único por tenant para evitar colisiones
     workflow_id = f"{tenant_id}-deployment-{router_number}-{int(datetime.now().timestamp())}"
-    
-    # Task queue específica del tenant
-    task_queue = f"tenant-{tenant_id}-deployments"
+    task_queue = f"{tenant_id}-deployments"
     
     print(f"🚀 [{tenant_id}] Iniciando deployment: {deployment_request.router_id}")
+    print(f"   Namespace: {tenant_id}")
     print(f"   Workflow ID: {workflow_id}")
     print(f"   Task Queue: {task_queue}\n")
     
     try:
-        # Ejecutar workflow de forma asíncrona (no bloqueante)
         handle = await client.start_workflow(
             "NetworkDeploymentWorkflow",
             deployment_request,
             id=workflow_id,
-            task_queue=task_queue,
-            # Search attributes para filtrar por tenant en Temporal UI
-            search_attributes={
-                "CustomStringField": [tenant_id]
-            }
+            task_queue=task_queue
         )
         
         print(f"✅ [{tenant_id}] Workflow iniciado: {handle.id}")
@@ -49,34 +48,31 @@ async def deploy_for_tenant(client: Client, tenant_id: str, router_number: int):
 
 async def multitenant_demo():
     """
-    Demo de arquitectura multitenant con Temporal.
+    Demo de arquitectura multitenant con Namespaces separados.
     
     Conceptos demostrados:
-    1. Task Queues por tenant: Aislamiento de workloads
-    2. Workflow IDs únicos: Evita colisiones entre tenants
-    3. Search Attributes: Filtrado por tenant en UI
-    4. Ejecución concurrente: Múltiples tenants simultáneos
+    1. Namespace por tenant: Aislamiento COMPLETO de datos
+    2. Cada tenant solo ve sus workflows en Temporal UI
+    3. Workflow IDs únicos por namespace
+    4. Ejecución concurrente de múltiples tenants
     """
     
     print("="*80)
-    print("DEMO: ARQUITECTURA MULTITENANT CON TEMPORAL")
+    print("DEMO: ARQUITECTURA MULTITENANT CON NAMESPACES")
     print("="*80)
     print()
     
     try:
-        client = await Client.connect("localhost:7233")
-        print("✅ Conectado a Temporal Server\n")
-        
         # Configuración de tenants y sus deployments
         tenant_deployments = {
-            "chogar": 2,    # 2 routers para Chogar
-            "amovil": 1,    # 1 router para AMovil
-            "afijo": 3      # 3 routers para AFijo
+            "chogar": 2,
+            "amovil": 1,
+            "afijo": 3
         }
         
         print("🏢 Configuración de tenants:")
         for tenant, count in tenant_deployments.items():
-            print(f"   {tenant}: {count} deployment(s)")
+            print(f"   {tenant}: {count} deployment(s) en namespace '{tenant}'")
         print()
         
         print("="*80)
@@ -88,10 +84,9 @@ async def multitenant_demo():
         tasks = []
         for tenant_id, deployment_count in tenant_deployments.items():
             for router_num in range(1, deployment_count + 1):
-                task = deploy_for_tenant(client, tenant_id, router_num)
+                task = deploy_for_tenant(tenant_id, router_num)
                 tasks.append(task)
         
-        # Esperar a que todos los workflows se inicien
         handles = await asyncio.gather(*tasks)
         successful_handles = [h for h in handles if h is not None]
         
@@ -106,19 +101,17 @@ async def multitenant_demo():
         print(f"   Temporal UI: http://localhost:8233")
         print()
         
-        print("🔍 Filtros en Temporal UI:")
+        print("🔍 Cómo ver workflows por tenant:")
         for tenant in tenant_deployments.keys():
-            print(f"   Tenant '{tenant}': CustomStringField = '{tenant}'")
+            print(f"   {tenant}: Seleccioná namespace '{tenant}' en el dropdown de Temporal UI")
         print()
         
-        print("💡 Próximos pasos:")
-        print("   1. Abre Temporal UI: http://localhost:8233")
-        print("   2. Filtra workflows por tenant usando Search Attributes")
-        print("   3. Envía signals para aprobar deployments:")
-        print("      temporal workflow signal --workflow-id <ID> --name approve_deployment")
+        print("🎯 Aislamiento:")
+        print("   - Cada tenant SOLO ve sus workflows")
+        print("   - No hay filtros necesarios")
+        print("   - Aislamiento completo de datos")
         print()
         
-        # Opcional: Esperar a que algunos workflows completen
         print("⏳ Esperando 10 segundos para ver el progreso inicial...")
         await asyncio.sleep(10)
         
@@ -131,6 +124,7 @@ async def multitenant_demo():
         print(f"\n❌ Error en demo: {e}")
         print("\nVerifica que:")
         print("  - Temporal Server esté corriendo: docker-compose ps")
+        print("  - Namespaces estén creados: python setup_namespaces.py")
         print("  - Workers estén activos: python multitenant_worker.py")
         return None
 
@@ -152,11 +146,12 @@ async def query_tenant_workflows(tenant_id: str):
 
 if __name__ == "__main__":
     print("\n" + "="*80)
-    print("TEMPORAL MULTITENANT DEMO")
+    print("TEMPORAL MULTITENANT DEMO - NAMESPACES")
     print("="*80)
     print("\nAsegúrate de tener corriendo:")
     print("  1. Temporal Server: docker-compose up -d")
-    print("  2. Workers: python multitenant_worker.py")
+    print("  2. Namespaces creados: python setup_namespaces.py")
+    print("  3. Workers: python multitenant_worker.py")
     print("\nPresiona Ctrl+C para cancelar\n")
     
     try:

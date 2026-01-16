@@ -42,9 +42,9 @@ Tiny-Setup/
 
 ### [Caso 05: Arquitectura Multitenant](./05-multitenant/)
 - **Tecnologías**: Temporal
-- **Objetivo**: Arquitectura multitenant escalable con task queues
-- **Qué hace**: Demuestra cómo múltiples clientes (chogar, amovil, afijo) comparten infraestructura con aislamiento lógico. Cada tenant tiene su task queue dedicada. Workers compartidos procesan workflows de todos los tenants.
-- **Características**: Task queues por tenant, workflow IDs únicos, search attributes, escalabilidad horizontal
+- **Objetivo**: Arquitectura multitenant escalable con namespaces separados
+- **Qué hace**: Demuestra cómo múltiples clientes (chogar, amovil, afijo) tienen aislamiento COMPLETO usando namespaces. Cada tenant tiene su propio namespace y solo ve sus workflows en Temporal UI. Aislamiento real de datos.
+- **Características**: Namespaces por tenant, aislamiento completo, escalabilidad horizontal, seguridad
 
 ## 🚀 Inicio Rápido
 

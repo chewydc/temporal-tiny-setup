@@ -12,34 +12,39 @@ from workflows import NetworkDeploymentWorkflow
 
 async def main():
     """
-    Worker multitenant que escucha múltiples task queues.
+    Worker multitenant con namespaces separados.
     
-    Estrategias de workers multitenant:
-    1. Worker compartido: Un worker escucha múltiples task queues (este ejemplo)
-    2. Workers dedicados: Un worker por tenant (mejor aislamiento)
-    3. Workers por pool: Grupos de tenants comparten workers
+    Cada tenant tiene su propio namespace:
+    - chogar: namespace "chogar"
+    - amovil: namespace "amovil"
+    - afijo: namespace "afijo"
+    
+    Aislamiento REAL: cada tenant solo ve sus workflows.
     """
     
     print("="*80)
-    print("WORKER MULTITENANT - TEMPORAL")
+    print("WORKER MULTITENANT - NAMESPACES SEPARADOS")
     print("="*80)
     
-    # Configuración de tenants
     tenants = ["chogar", "amovil", "afijo"]
     
     print(f"\n🏢 Tenants configurados: {', '.join(tenants)}")
-    print("\nEstrategia: Worker compartido (escucha múltiples task queues)")
-    print("Ventajas: Eficiente en recursos, fácil de escalar")
-    print("Desventajas: Menos aislamiento entre tenants\n")
+    print("\nEstrategia: Namespace por tenant (aislamiento completo)")
+    print("Ventajas: Aislamiento total de datos, cada tenant ve solo sus workflows")
+    print("Desventajas: Mayor complejidad operacional\n")
     
     try:
-        client = await Client.connect("localhost:7233")
-        print("✅ Conectado a Temporal Server (localhost:7233)\n")
-        
-        # Crear un worker por cada tenant
         workers = []
+        
         for tenant_id in tenants:
-            task_queue = f"tenant-{tenant_id}-deployments"
+            # Conectar al namespace específico del tenant
+            client = await Client.connect(
+                "localhost:7233",
+                namespace=tenant_id  # ⭐ Namespace separado
+            )
+            
+            # Task queue dentro del namespace
+            task_queue = f"{tenant_id}-deployments"
             
             worker = Worker(
                 client,
@@ -54,7 +59,8 @@ async def main():
                 ]
             )
             workers.append(worker)
-            print(f"   📋 Task Queue: {task_queue}")
+            print(f"   📦 Namespace: {tenant_id}")
+            print(f"      📋 Task Queue: {task_queue}")
         
         print("\n" + "="*80)
         print("WORKERS INICIADOS - Esperando workflows...")
@@ -63,9 +69,9 @@ async def main():
         print("  python multitenant_demo.py")
         print("\nPara ver workflows en Temporal UI:")
         print("  http://localhost:8233")
+        print("  Seleccioná el namespace del tenant en el dropdown")
         print()
         
-        # Ejecutar todos los workers concurrentemente
         await asyncio.gather(*[worker.run() for worker in workers])
         
     except KeyboardInterrupt:
@@ -74,7 +80,7 @@ async def main():
         print(f"\n❌ Error en workers: {str(e)}")
         print("\nVerifica que:")
         print("  - Temporal Server esté corriendo: docker-compose ps")
-        print("  - Puerto 7233 esté disponible")
+        print("  - Namespaces estén creados: python setup_namespaces.py")
 
 if __name__ == "__main__":
     asyncio.run(main())
