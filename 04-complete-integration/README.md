@@ -259,6 +259,7 @@ docker system prune -f
 ├── activities.py                       # Activities Temporal
 ├── run_worker.py                       # Worker Temporal
 ├── run_deployment.py                   # Ejecutor principal
+├── monitor_workflow.py                 # ⭐ Monitor de workflows (consulta externa)
 ├── ansible-playbooks/
 │   ├── deploy_router.yml                   # Playbook Ansible (router + firewall)
 │   └── inventory.ini                       # Inventario Ansible
@@ -266,6 +267,36 @@ docker system prune -f
 │   └── temporal_network_deployment.py      # DAG Airflow (configuración firewall)
 └── server-content/
     └── index.html                          # Página del servidor
+```
+
+## 🔍 Monitoreo y Consulta Externa
+
+### Monitor de Workflows (`monitor_workflow.py`)
+
+Script para consultar el estado de workflows desde fuera, útil para:
+- **Integración con IA**: Enviar info de errores a IA para diagnóstico automático
+- **Sistemas de monitoreo**: Dashboards externos
+- **Alertas personalizadas**: Notificaciones cuando workflows fallan
+
+```bash
+python monitor_workflow.py
+```
+
+**Funcionalidades**:
+1. Consultar estado de un workflow específico
+2. Listar workflows fallidos (para análisis de IA)
+3. Monitorear workflow en tiempo real
+4. Exportar datos para análisis de IA
+
+**Ejemplo de uso con IA**:
+```bash
+# 1. Ejecutar monitor
+python monitor_workflow.py
+
+# 2. Seleccionar opción 4 (Exportar para IA)
+# 3. Copiar el JSON generado
+# 4. Enviarlo a ChatGPT/Claude con:
+#    "Analiza este error de workflow y sugiere solución"
 ```
 
 ## 🎯 Valor Demostrado
