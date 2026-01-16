@@ -10,6 +10,7 @@ Tiny-Setup/
 ├── 02-airflow-integration/       # Temporal + Airflow
 ├── 03-ansible-integration/       # Temporal + Ansible + Airflow
 ├── 04-complete-integration/      # Demo completa con firewall
+├── 05-multitenant/               # Arquitectura multitenant
 └── README.md                     # Este archivo
 ```
 
@@ -38,6 +39,12 @@ Tiny-Setup/
 - **Objetivo**: Conectividad cliente-servidor con firewall selectivo
 - **Qué hace**: Demuestra un problema real: cliente y servidor aislados. Ansible despliega router con firewall (PING ✅, HTTP ❌). Temporal pausa con Signal desde Web UI. Airflow habilita HTTP. Resultado: conectividad completa.
 - **Características**: Temporal Signals, firewall iptables, tests de conectividad
+
+### [Caso 05: Arquitectura Multitenant](./05-multitenant/)
+- **Tecnologías**: Temporal
+- **Objetivo**: Arquitectura multitenant escalable con task queues
+- **Qué hace**: Demuestra cómo múltiples clientes (chogar, amovil, afijo) comparten infraestructura con aislamiento lógico. Cada tenant tiene su task queue dedicada. Workers compartidos procesan workflows de todos los tenants.
+- **Características**: Task queues por tenant, workflow IDs únicos, search attributes, escalabilidad horizontal
 
 ## 🚀 Inicio Rápido
 
