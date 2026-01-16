@@ -15,15 +15,11 @@ async def setup_namespaces():
     print("="*60)
     print()
     
-    # Conectar al namespace default para crear otros
-    client = await Client.connect("localhost:7233")
-    
     for tenant in tenants:
-        namespace = tenant
+        namespace = f"tenant-{tenant}"
         print(f"📦 Creando namespace: {namespace}")
         
         try:
-            # Crear namespace usando temporal CLI
             import subprocess
             result = subprocess.run(
                 ["temporal", "operator", "namespace", "create", namespace],
@@ -39,7 +35,9 @@ async def setup_namespaces():
                 print(f"   ❌ Error: {result.stderr}")
                 
         except Exception as e:
-            print(f"   ❌ Error creando namespace: {e}")
+            print(f"   ❌ Error: {e}")
+            print(f"   💡 Asegurate de tener Temporal CLI instalado")
+            print(f"      O usa docker: docker exec temporal-admin-tools tctl namespace register {namespace}")
     
     print()
     print("="*60)
@@ -48,11 +46,14 @@ async def setup_namespaces():
     print()
     print("Namespaces creados:")
     for tenant in tenants:
-        print(f"  - {tenant}")
+        print(f"  - tenant-{tenant}")
     print()
     print("Ahora podés ejecutar:")
-    print("  1. python multitenant_worker.py")
-    print("  2. python multitenant_demo.py")
+    print("  1. python secure_multitenant_demo.py")
+    print()
+    print("Para verificar en UI:")
+    print("  http://localhost:8233")
+    print("  (Cambiar namespace en dropdown superior)")
     print()
 
 if __name__ == "__main__":
