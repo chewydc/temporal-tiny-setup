@@ -34,7 +34,7 @@ Una arquitectura donde **múltiples clientes (tenants)** comparten la misma infr
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │   Tenant A  │     │   Tenant B  │     │   Tenant C  │
-│  (chogar)│     │   (amovil)  │     │  (afijo)  │
+│  (chogar)   │     │   (amovil)  │     │  (afijo)    │
 └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
        │                   │                   │
        │ Start Workflow    │                   │
@@ -49,17 +49,17 @@ Una arquitectura donde **múltiples clientes (tenants)** comparten la misma infr
        │ Task Queue        │                   │
        ▼                   ▼                   ▼
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│tenant-acme- │     │tenant-amovil│     │tenant-afijo│
-│corp-deploy  │     │-deployments │     │-deployments │
+│tenant-chogar│     │tenant-amovil│     │tenant-afijo │
+│-deployments │     │-deployments │     │-deployments │
 └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
        │                   │                   │
        └───────────────────┴───────────────────┘
                            │
                            ▼
-                  ┌─────────────────┐
-                  │ Worker Pool     │
+                  ┌───────────────────┐
+                  │ Worker Pool       │
                   │ (Shared/Dedicated)│
-                  └─────────────────┘
+                  └───────────────────┘
 ```
 
 ### Componentes del Sistema
@@ -193,7 +193,7 @@ if await self._check_tenant_rate_limit(tenant_id):
 ### Archivos Principales
 
 ```
-05-example-with-temp-features/
+05-multitenant/
 ├── models.py                  # Modelos con tenant_id
 ├── workflows.py               # Workflow multitenant
 ├── activities.py              # Activities (sin cambios)
@@ -216,7 +216,7 @@ if await self._check_tenant_rate_limit(tenant_id):
 ### Paso 1: Iniciar Temporal Server
 
 ```bash
-cd 05-example-with-temp-features
+cd 05-multitenant
 docker-compose up -d
 ```
 
@@ -413,6 +413,3 @@ Requiere:
 
 ---
 
-**Autor**: Equipo de Automatización  
-**Última actualización**: 2024  
-**Versión**: 1.0

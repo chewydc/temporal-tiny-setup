@@ -82,7 +82,9 @@ python multitenant_demo.py
 
 ## 📚 Documentación
 
+- **INICIO.md**: Inicio rápido (1 página)
 - **README.md**: Guía rápida de uso
+- **RESUMEN_EJECUTIVO.md**: Para compartir con el equipo
 - **MULTITENANT.md**: Documentación completa (arquitectura, decisiones, roadmap)
 - **simple_demo.py**: Ejemplo con un solo tenant
 - **multitenant_demo.py**: Demo completo con 3 tenants
@@ -127,6 +129,5 @@ Este es un punto de partida para discusión. Áreas para explorar:
 
 ---
 
-**Autor**: [Tu nombre]  
-**Fecha**: 2024  
-**Contacto**: [Tu email/Slack]
+**Autor**: Damian del Campo  
+**Fecha**: 2026/01/16

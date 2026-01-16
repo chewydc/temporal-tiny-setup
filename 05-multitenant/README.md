@@ -129,16 +129,17 @@ CustomStringField = "chogar"
 ## 📦 Archivos del Proyecto
 
 ```
-05-example-with-temp-features/
+05-multitenant/
 ├── MULTITENANT.md              # 📚 Documentación completa
 ├── README.md                   # Este archivo
+├── RESUMEN_EJECUTIVO.md        # Para compartir con el equipo
+├── INICIO.md                   # Inicio rápido
 ├── models.py                   # Modelos con tenant_id
 ├── workflows.py                # Workflow multitenant
-├── activities.py               # Activities (sin cambios)
+├── activities.py               # Activities
 ├── multitenant_worker.py       # ⭐ Worker que escucha múltiples queues
 ├── multitenant_demo.py         # ⭐ Demo con 3 tenants
-├── run_worker.py               # Worker original (legacy)
-├── run_deployment.py           # Deployment original (legacy)
+├── simple_demo.py              # Demo simple con 1 tenant
 └── docker-compose.yml          # Infraestructura
 ```
 
