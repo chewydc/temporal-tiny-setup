@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lifecycle-versioned-v2
+  namespace: workers
+  labels:
+    app: lifecycle-versioned
+    version: v2.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lifecycle-versioned
+      version: v2.0.0
+  template:
+    metadata:
+      labels:
+        app: lifecycle-versioned
+        version: v2.0.0
+    spec:
+      containers:
+      - name: worker
+        image: lifecycle-worker:v2.0.0
+        imagePullPolicy: Never
+        command: ["python", "-m", "worker.versioned_worker"]
+        env:
+        - name: TEMPORAL_HOST
+          value: "temporal-frontend-lb.temporal.svc.cluster.local:7233"
+        - name: TASK_QUEUE
+          value: "lifecycle-versioned-queue"
+        - name: WORKER_VERSION
+          value: "v2.0.0"
+        - name: TEMPORAL_NAMESPACE
+          value: "default"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

@@ -1,0 +1,4 @@
+temporalio==1.5.1
+asyncio-mqtt==0.16.1
+pydantic==2.5.0
+httpx==0.25.2

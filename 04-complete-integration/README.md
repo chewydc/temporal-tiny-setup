@@ -97,7 +97,7 @@ python run_deployment.py
 1. **Después del despliegue de Ansible**, el workflow se pausará
 2. **Verifica conectividad parcial**:
    ```bash
-   docker exec test-client ping -c 1 192.168.200.10     # ✅ Debe funcionar
+   docker exec test-client ping -c 1 -W 1 192.168.200.10     # ✅ Debe funcionar
    docker exec test-client wget -O - http://192.168.200.10 --timeout=5 --tries=1  # ❌ Debe fallar
    ```
 3. **Desde Temporal Web UI** (http://localhost:8233):
@@ -113,16 +113,16 @@ python run_deployment.py
 #### Test de Conectividad por Etapas
 ```bash
 # ESTADO 1: Sin router (debería fallar todo)
-docker exec test-client ping -c 1 192.168.200.10
-docker exec test-client wget -q -O - http://192.168.200.10
+docker exec test-client ping -c 1 -W 1 192.168.200.10
+docker exec test-client wget -q -O - http://192.168.200.10 --timeout=5 --tries=1
 
 # ESTADO 2: Post-Ansible (PING OK, HTTP FAIL)
-docker exec test-client ping -c 1 192.168.200.10     # ✅ Funciona
-docker exec test-client wget -q -O - http://192.168.200.10  # ❌ Bloqueado
+docker exec test-client ping -c 1 -W 1 192.168.200.10     # ✅ Funciona
+docker exec test-client wget -q -O - http://192.168.200.10  --timeout=5 --tries=1 # ❌ Bloqueado
 
 # ESTADO 3: Post-Airflow (PING + HTTP OK)
-docker exec test-client ping -c 1 192.168.200.10     # ✅ Funciona
-docker exec test-client wget -q -O - http://192.168.200.10  # ✅ Funciona
+docker exec test-client ping -c 1 -W 1 192.168.200.10     # ✅ Funciona
+docker exec test-client wget -q -O - http://192.168.200.10  --timeout=5 --tries=1 # ✅ Funciona
 ```
 
 #### Acceso Web

@@ -107,7 +107,7 @@ Cada carpeta contiene su propio README.md con:
 
 Cada caso puede ejecutarse independientemente. Para agregar nuevos casos:
 
-1. Crear nueva carpeta `XX-nuevo-caso/`
+1. Crear nueva carpeta -nuevo-caso/`
 2. Incluir todos los archivos necesarios
 3. Agregar README.md específico
 4. Actualizar este README principal

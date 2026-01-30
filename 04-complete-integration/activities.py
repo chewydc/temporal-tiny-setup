@@ -161,21 +161,27 @@ class NetworkActivitiesWithConnectivity:
         try:
             print("Ejecutando Ansible Runner...")
             
-            check_cmd = ["docker", "ps", "--filter", "name=ansible-runner", "--format", "{{.Names}}"]
+            # Forzar el uso del contexto desktop-linux para evitar problemas de conexión
+            check_cmd = ["docker", "--context", "desktop-linux", "ps", "--filter", "name=ansible-runner", "--format", "{{.Names}}"]
             check_result = subprocess.run(check_cmd, capture_output=True, text=True)
             
+            print(f"DEBUG: Container check - RC: {check_result.returncode}, STDOUT: '{check_result.stdout.strip()}', STDERR: '{check_result.stderr.strip()}'")
+            
+            if check_result.returncode != 0:
+                return {"success": False, "error": f"Docker command failed: {check_result.stderr}"}
+            
             if "ansible-runner" not in check_result.stdout:
-                return {"success": False, "error": "ansible-runner container not running"}
+                return {"success": False, "error": f"ansible-runner container not found. Available containers: {check_result.stdout.strip()}"}
             
             print("Contenedor ansible-runner encontrado")
             
             # Verificar si el router ya existe y eliminarlo
-            cleanup_cmd = ["docker", "rm", "-f", request.router_id]
+            cleanup_cmd = ["docker", "--context", "desktop-linux", "rm", "-f", request.router_id]
             subprocess.run(cleanup_cmd, capture_output=True)
             print(f"Limpieza previa del router {request.router_id}")
             
             ansible_cmd = [
-                "docker", "exec", "ansible-runner",
+                "docker", "--context", "desktop-linux", "exec", "ansible-runner",
                 "ansible-playbook", "/runner/project/deploy_router.yml",
                 "-i", "/runner/project/inventory.ini",
                 "-e", f"router_id={request.router_id}",

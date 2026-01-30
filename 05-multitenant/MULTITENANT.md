@@ -411,5 +411,4 @@ Requiere:
 4. **Configura search attributes**: Para queries más potentes
 5. **Mide performance**: Agrega métricas y observa el comportamiento
 
----
 

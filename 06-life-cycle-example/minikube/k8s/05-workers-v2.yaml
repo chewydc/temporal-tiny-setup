@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lifecycle-workers-v2
+  namespace: workers
+  labels:
+    app: lifecycle-workers
+    version: v2
+spec:
+  replicas: 0  # Inicialmente 0, se escala durante rollout
+  selector:
+    matchLabels:
+      app: lifecycle-workers
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: lifecycle-workers
+        version: v2
+    spec:
+      containers:
+      - name: worker
+        image: lifecycle-worker:v2.0.0
+        imagePullPolicy: Never
+        env:
+        - name: TEMPORAL_HOST
+          value: "temporal-frontend-lb.temporal.svc.cluster.local:7233"
+        - name: TASK_QUEUE
+          value: "lifecycle-queue"
+        - name: WORKER_VERSION
+          value: "v2.0.0"
+        - name: TEMPORAL_NAMESPACE
+          value: "default"
+        - name: USE_VERSIONING
+          value: "true"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: BUILD_TIME
+          value: "2024-01-22T11:00:00Z"
+        - name: GIT_COMMIT
+          value: "def456"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lifecycle-workers-v2
+  namespace: workers
+  labels:
+    app: lifecycle-workers
+    version: v2
+spec:
+  selector:
+    app: lifecycle-workers
+    version: v2
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
