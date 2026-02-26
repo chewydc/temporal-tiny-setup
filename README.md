@@ -11,6 +11,8 @@ Tiny-Setup/
 ├── 03-ansible-integration/       # Temporal + Ansible + Airflow
 ├── 04-complete-integration/      # Demo completa con firewall
 ├── 05-multitenant/               # Arquitectura multitenant
+├── 06-life-cycle-example/        # Ciclo de vida con Kubernetes
+├── 07-airflow-to-temporal-mcp-example/  # MCP Server para migración Airflow→Temporal
 └── README.md                     # Este archivo
 ```
 
@@ -45,6 +47,12 @@ Tiny-Setup/
 - **Objetivo**: Arquitectura multitenant escalable con namespaces separados
 - **Qué hace**: Demuestra cómo múltiples clientes (chogar, amovil, afijo) tienen aislamiento COMPLETO usando namespaces. Cada tenant tiene su propio namespace y solo ve sus workflows en Temporal UI. Aislamiento real de datos.
 - **Características**: Namespaces por tenant, aislamiento completo, escalabilidad horizontal, seguridad
+
+### [Caso 07: MCP Server para Migración Airflow→Temporal](./07-airflow-to-temporal-mcp-example/)
+- **Tecnologías**: Model Context Protocol (MCP)
+- **Objetivo**: Herramienta de migración automática de DAGs de Airflow a Workflows de Temporal
+- **Qué hace**: MCP Server que analiza DAGs de Airflow y genera automáticamente código de Temporal equivalente (workflows, activities, workers). Facilita la migración masiva de procesos existentes.
+- **Características**: Análisis de DAGs, generación de código, patrones de migración, SDK público/privado
 
 ## 🚀 Inicio Rápido
 

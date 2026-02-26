@@ -1,0 +1,273 @@
+# Configuración de la Plataforma de Automatización
+# Define reglas, estándares y Activities centralizadas
+
+platform:
+  name: "Automation Platform"
+  version: "1.0.0"
+  
+  # SDK de plataforma con Activities centralizadas
+  sdk:
+    package: "platform_sdk"
+    version: ">=1.0.0"
+    repository: "https://artifactory.company.com/pypi/platform-sdk"
+
+# Activities centralizadas provistas por la plataforma
+# Estas NO deben ser reimplementadas por los usuarios
+centralized_activities:
+  
+  # Networking
+  - name: "test_connectivity"
+    module: "platform_sdk.network"
+    function: "test_connectivity"
+    description: "Prueba conectividad ICMP/HTTP entre hosts"
+    triggers:
+      - "ping"
+      - "connectivity"
+      - "network_test"
+      - "test_connection"
+    parameters:
+      - name: "source"
+        type: "str"
+        required: true
+      - name: "destination"
+        type: "str"
+        required: true
+      - name: "test_type"
+        type: "str"
+        default: "ping"
+  
+  - name: "configure_firewall"
+    module: "platform_sdk.network"
+    function: "configure_firewall"
+    description: "Configura reglas de firewall en dispositivos de red"
+    triggers:
+      - "firewall"
+      - "iptables"
+      - "security"
+      - "acl"
+    parameters:
+      - name: "device_id"
+        type: "str"
+        required: true
+      - name: "rules"
+        type: "list"
+        required: true
+  
+  # Infrastructure
+  - name: "deploy_router"
+    module: "platform_sdk.infrastructure"
+    function: "deploy_router"
+    description: "Despliega router virtual usando Ansible"
+    triggers:
+      - "ansible"
+      - "router"
+      - "deploy"
+      - "provision"
+    parameters:
+      - name: "router_id"
+        type: "str"
+        required: true
+      - name: "router_ip"
+        type: "str"
+        required: true
+  
+  - name: "deploy_server"
+    module: "platform_sdk.infrastructure"
+    function: "deploy_server"
+    description: "Despliega servidor usando Ansible/Terraform"
+    triggers:
+      - "server"
+      - "vm"
+      - "deploy"
+      - "provision"
+  
+  # Airflow Integration (para fase de co-living)
+  - name: "trigger_airflow_dag"
+    module: "platform_sdk.airflow"
+    function: "trigger_airflow_dag"
+    description: "Dispara DAG de Airflow y espera finalización (wrapper para migración)"
+    triggers:
+      - "airflow"
+      - "dag"
+      - "legacy"
+    parameters:
+      - name: "dag_id"
+        type: "str"
+        required: true
+      - name: "conf"
+        type: "dict"
+        required: false
+  
+  # AWX Integration
+  - name: "launch_awx_job"
+    module: "platform_sdk.awx"
+    function: "launch_awx_job"
+    description: "Lanza job template en AWX y espera finalización"
+    triggers:
+      - "awx"
+      - "job_template"
+      - "playbook"
+    parameters:
+      - name: "template_id"
+        type: "int"
+        required: true
+      - name: "extra_vars"
+        type: "dict"
+        required: false
+
+# Reglas para Activities personalizadas
+custom_activities:
+  
+  # Patrones permitidos para nombres
+  allowed_patterns:
+    - "configure_*"
+    - "validate_*"
+    - "process_*"
+    - "transform_*"
+    - "notify_*"
+  
+  # Convención de nombres
+  naming_convention: "snake_case"
+  
+  # Prefijo obligatorio por tenant (opcional)
+  require_tenant_prefix: false
+  
+  # Template para generar Activities personalizadas
+  template: |
+    @activity.defn
+    async def {activity_name}(self, params: dict) -> str:
+        \"\"\"
+        {description}
+        
+        Migrated from Airflow task: {original_task_id}
+        Original DAG: {dag_id}
+        \"\"\"
+        
+        activity.logger.info(f"Executing {activity_name} with params: {{params}}")
+        
+        try:
+            {implementation}
+            
+            activity.logger.info(f"{activity_name} completed successfully")
+            return "Success"
+            
+        except Exception as e:
+            activity.logger.error(f"{activity_name} failed: {{str(e)}}")
+            raise
+
+# Mapeo de Airflow Operators a Activities
+operator_mapping:
+  
+  BashOperator:
+    # Analizar el bash_command para detectar patrones
+    patterns:
+      - pattern: "ping"
+        activity: "test_connectivity"
+        centralized: true
+      - pattern: "iptables"
+        activity: "configure_firewall"
+        centralized: true
+      - pattern: "ansible-playbook"
+        activity: "deploy_router"
+        centralized: true
+    # Si no match, generar Activity personalizada
+    default: "custom_bash_activity"
+  
+  PythonOperator:
+    default: "custom_python_activity"
+  
+  HttpOperator:
+    default: "custom_http_activity"
+  
+  DockerOperator:
+    default: "custom_docker_activity"
+
+# Configuración de Workflows generados
+workflow_config:
+  
+  # Timeout por defecto
+  default_timeout_minutes: 30
+  
+  # Retry policy por defecto
+  default_retry_policy:
+    initial_interval_seconds: 1
+    backoff_coefficient: 2.0
+    maximum_interval_seconds: 100
+    maximum_attempts: 3
+  
+  # Incluir manejo de signals
+  include_signals: true
+  
+  # Incluir queries
+  include_queries: true
+  
+  # Generar compensación automática
+  generate_compensation: true
+
+# Configuración de Workers
+worker_config:
+  
+  # Namespace por defecto
+  default_namespace: "default"
+  
+  # Task queue naming convention
+  task_queue_pattern: "{tenant}-{workflow_type}"
+  
+  # Configuración de observabilidad
+  observability:
+    opentelemetry: true
+    metrics: true
+    tracing: true
+  
+  # Configuración de recursos
+  resources:
+    max_concurrent_activities: 100
+    max_concurrent_workflows: 50
+
+# Fases de migración
+migration_phases:
+  
+  wrapper:
+    description: "Fase 1: Wrapper completo - DAG se ejecuta desde Temporal"
+    generate_airflow_adapter: true
+    use_centralized_activities: false
+    deprecate_dag: false
+  
+  hybrid:
+    description: "Fase 2: Híbrido - Algunas tasks nativas, otras en Airflow"
+    generate_airflow_adapter: true
+    use_centralized_activities: true
+    deprecate_dag: false
+  
+  native:
+    description: "Fase 3: Nativo - Todo migrado a Temporal"
+    generate_airflow_adapter: false
+    use_centralized_activities: true
+    deprecate_dag: true
+
+# Validaciones
+validation:
+  
+  # Validar que Activities centralizadas no se reimplementen
+  enforce_centralized_activities: true
+  
+  # Validar naming conventions
+  enforce_naming_conventions: true
+  
+  # Validar que el código generado sea sintácticamente correcto
+  validate_syntax: true
+  
+  # Validar imports
+  validate_imports: true
+
+# Documentación generada
+documentation:
+  
+  # Incluir comentarios de migración
+  include_migration_comments: true
+  
+  # Generar README por workflow
+  generate_readme: true
+  
+  # Incluir diagrama de flujo
+  include_flow_diagram: false
