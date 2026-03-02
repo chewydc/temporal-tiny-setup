@@ -11,6 +11,12 @@ class ActivityGenerator:
     def __init__(self, platform_rules):
         self.platform_rules = platform_rules
     
+    def _indent_code(self, code: str, spaces: int) -> str:
+        """Indenta código con el número de espacios especificado"""
+        indent = " " * spaces
+        lines = code.split("\n")
+        return "\n".join(indent + line if line.strip() else "" for line in lines)
+    
     def generate(
         self,
         dag_info: DagInfo,
@@ -160,8 +166,35 @@ trigger_airflow_dag = activities.trigger_airflow_dag
         # Generar imports de Activities centralizadas
         centralized_imports = []
         custom_activities = []
+        all_activities_list = []  # Para el export final
         
         for task in dag_info.tasks:
+            # NUEVO: Si el task tiene operadores anidados, generar Activities descompuestas
+            if task.operator_args.get("should_decompose"):
+                decomposed = task.operator_args.get("decomposed_activities", [])
+                
+                for decomp_activity in decomposed:
+                    activity_name = decomp_activity["activity"]
+                    is_centralized = decomp_activity.get("is_centralized", False)
+                    
+                    if is_centralized and not force_custom:
+                        # Usar Activity centralizada
+                        activity_info = self.platform_rules.get_centralized_activity(activity_name)
+                        if activity_info:
+                            module = activity_info["module"]
+                            function = activity_info["function"]
+                            centralized_imports.append(f"from {module} import {function}")
+                            all_activities_list.append(function)
+                    else:
+                        # Generar Activity personalizada para el operador anidado
+                        custom_act = self._generate_decomposed_activity(
+                            decomp_activity,
+                            task.task_id
+                        )
+                        custom_activities.append(custom_act)
+                        all_activities_list.append(activity_name)
+            
+            # Generar Activity principal del task
             if task.is_centralized and not force_custom:
                 # Usar Activity centralizada
                 activity = self.platform_rules.get_centralized_activity(task.suggested_activity)
@@ -169,9 +202,11 @@ trigger_airflow_dag = activities.trigger_airflow_dag
                     module = activity["module"]
                     function = activity["function"]
                     centralized_imports.append(f"from {module} import {function}")
+                    all_activities_list.append(function)
             else:
                 # Generar Activity personalizada
                 custom_activities.append(self._generate_custom_activity(task))
+                all_activities_list.append(task.task_id)
         
         imports_code = "\n".join(sorted(set(centralized_imports))) if centralized_imports else ""
         custom_code = "\n\n".join(custom_activities) if custom_activities else ""
@@ -204,41 +239,250 @@ custom_activities = CustomActivities()
         
         return header
     
+    def _generate_decomposed_activity(self, decomp_info: dict, parent_task_id: str) -> str:
+        """
+        Genera una Activity descompuesta desde un operador anidado
+        
+        Args:
+            decomp_info: Información del operador anidado
+            parent_task_id: ID del task padre
+        
+        Returns:
+            Código de la Activity
+        """
+        
+        operator_type = decomp_info["operator"]
+        activity_name = decomp_info["activity"]
+        args = decomp_info.get("args", {})
+        
+        # Generar implementación según el tipo de operador
+        if operator_type == "BigQueryGetDataOperator":
+            dataset = args.get("dataset_id", "dataset")
+            table = args.get("table_id", "table")
+            max_results = args.get("max_results", 1000)
+            
+            implementation = f'''
+        # Activity descompuesta desde {parent_task_id}
+        # Operador original: {operator_type}
+        
+        activity.logger.info(f"Querying BigQuery: {{params}}")
+        
+        # TODO: Usar Activity centralizada del SDK
+        # from platform_sdk.bigquery import bigquery_get_data
+        # result = await bigquery_get_data(params)
+        
+        # Implementación temporal:
+        dataset_id = params.get("dataset_id", "{dataset}")
+        table_id = params.get("table_id", "{table}")
+        max_results = params.get("max_results", {max_results})
+        
+        activity.logger.info(f"Would query: {{dataset_id}}.{{table_id}}")
+        
+        return {{"status": "success", "dataset": dataset_id, "table": table_id}}
+'''
+        elif operator_type == "BigQueryExecuteQueryOperator":
+            sql = args.get("sql", "")
+            
+            implementation = f'''
+        # Activity descompuesta desde {parent_task_id}
+        # Operador original: {operator_type}
+        
+        activity.logger.info(f"Executing BigQuery query")
+        
+        # TODO: Usar Activity centralizada del SDK
+        # from platform_sdk.bigquery import bigquery_execute_query
+        # result = await bigquery_execute_query(params)
+        
+        sql = params.get("sql", "")
+        activity.logger.info(f"Would execute SQL: {{sql[:100]}}...")
+        
+        return {{"status": "success", "query_executed": True}}
+'''
+        elif operator_type == "EmailOperator":
+            to = args.get("to", [])
+            subject = args.get("subject", "")
+            
+            implementation = f'''
+        # Activity descompuesta desde {parent_task_id}
+        # Operador original: {operator_type}
+        
+        activity.logger.info(f"Sending email")
+        
+        # TODO: Usar Activity centralizada del SDK
+        # from platform_sdk.notifications import send_email
+        # result = await send_email(params)
+        
+        to_addresses = params.get("to", {to})
+        subject = params.get("subject", "{subject}")
+        
+        activity.logger.info(f"Would send email to: {{to_addresses}}")
+        
+        return {{"status": "success", "recipients": to_addresses}}
+'''
+        else:
+            implementation = f'''
+        # Activity descompuesta desde {parent_task_id}
+        # Operador original: {operator_type}
+        
+        activity.logger.info(f"Executing decomposed activity: {{params}}")
+        
+        # TODO: Implementar lógica para {operator_type}
+        
+        return {{"status": "success", "operator": "{operator_type}"}}
+'''
+        
+        return f'''    @activity.defn
+    async def {activity_name}(self, params: Dict[str, Any]) -> str:
+        """
+        Activity descompuesta desde task: {parent_task_id}
+        Operador anidado original: {operator_type}
+        """
+        
+        activity.logger.info(f"Executing {activity_name} with params: {{params}}")
+        
+        try:
+{implementation}
+            activity.logger.info(f"{activity_name} completed successfully")
+            return result
+            
+        except Exception as e:
+            activity.logger.error(f"{activity_name} failed: {{str(e)}}")
+            raise
+'''
+    
     def _generate_custom_activity(self, task) -> str:
         """Genera una Activity personalizada"""
         
         activity_name = task.task_id
         
-        # Generar implementación básica según el operator
+        # Generar implementación según el operator
         if task.operator_type == "BashOperator":
             bash_command = task.operator_args.get("bash_command", "echo 'TODO'")
             implementation = f'''
-        # TODO: Implementar lógica de: {bash_command}
-        activity.logger.info(f"Executing bash command: {bash_command}")
+        import subprocess
         
-        # Placeholder implementation
-        result = "Command executed successfully"
+        bash_command = "{bash_command}"
+        activity.logger.info(f"Executing bash command: {{bash_command}}")
         
-        return result
+        result = subprocess.run(
+            bash_command,
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"Command failed: {{result.stderr}}")
+        
+        return result.stdout
 '''
         elif task.operator_type == "PythonOperator":
-            implementation = f'''
-        # TODO: Implementar lógica de PythonOperator
-        activity.logger.info(f"Executing Python callable")
+            # Extraer información de la función si está disponible
+            python_callable = task.operator_args.get("python_callable", "")
+            function_code = task.operator_args.get("function_code", "")
+            
+            if function_code:
+                # Si tenemos el código de la función, usarlo
+                implementation = f'''
+        # Código extraído del DAG original
+        activity.logger.info(f"Executing Python function: {python_callable}")
         
-        # Placeholder implementation
-        result = "Python callable executed successfully"
+        # TODO: Adaptar esta función para Temporal
+        # Función original:
+        {self._indent_code(function_code, 8)}
         
+        # Ejecutar lógica
+        result = {python_callable}(**params)
         return result
+'''
+            else:
+                implementation = f'''
+        # Función Python: {python_callable}
+        activity.logger.info(f"Executing Python callable: {python_callable}")
+        
+        # TODO: Implementar la lógica de la función {python_callable}
+        # Esta función debe ser extraída del DAG original y adaptada aquí
+        
+        result = {{"status": "success", "message": "Function executed"}}
+        return result
+'''
+        elif task.operator_type == "BigQueryGetDataOperator":
+            dataset = task.operator_args.get("dataset_id", "dataset")
+            table = task.operator_args.get("table_id", "table")
+            max_results = task.operator_args.get("max_results", 1000)
+            
+            implementation = f'''
+        from google.cloud import bigquery
+        
+        activity.logger.info(f"Querying BigQuery: {{params}}")
+        
+        client = bigquery.Client()
+        dataset_id = params.get("dataset_id", "{dataset}")
+        table_id = params.get("table_id", "{table}")
+        max_results = params.get("max_results", {max_results})
+        
+        query = f"SELECT * FROM `{{client.project}}.{{dataset_id}}.{{table_id}}` LIMIT {{max_results}}"
+        
+        query_job = client.query(query)
+        results = query_job.result()
+        
+        data = [dict(row) for row in results]
+        activity.logger.info(f"Retrieved {{len(data)}} rows from BigQuery")
+        
+        return data
+'''
+        elif task.operator_type == "BigQueryExecuteQueryOperator":
+            sql = task.operator_args.get("sql", "SELECT 1")
+            
+            implementation = f'''
+        from google.cloud import bigquery
+        
+        activity.logger.info(f"Executing BigQuery query")
+        
+        client = bigquery.Client()
+        sql = params.get("sql", """{sql}""")
+        
+        query_job = client.query(sql)
+        query_job.result()  # Wait for completion
+        
+        activity.logger.info(f"Query executed successfully")
+        return {{"status": "success", "job_id": query_job.job_id}}
+'''
+        elif task.operator_type == "EmailOperator":
+            to = task.operator_args.get("to", [])
+            subject = task.operator_args.get("subject", "")
+            
+            implementation = f'''
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        activity.logger.info(f"Sending email")
+        
+        to_addresses = params.get("to", {to})
+        subject = params.get("subject", "{subject}")
+        html_content = params.get("html_content", "")
+        files = params.get("files", [])
+        
+        # TODO: Configurar SMTP server y credenciales
+        # msg = MIMEMultipart()
+        # msg['From'] = "sender@example.com"
+        # msg['To'] = ", ".join(to_addresses)
+        # msg['Subject'] = subject
+        # msg.attach(MIMEText(html_content, 'html'))
+        
+        activity.logger.info(f"Email would be sent to: {{to_addresses}}")
+        return {{"status": "success", "recipients": to_addresses}}
 '''
         else:
             implementation = f'''
-        # TODO: Implementar lógica de {task.operator_type}
+        # Operator: {task.operator_type}
         activity.logger.info(f"Executing {{params}}")
         
-        # Placeholder implementation
-        result = "Activity executed successfully"
+        # TODO: Implementar lógica específica para {task.operator_type}
+        # Consultar documentación del operator en Airflow
         
+        result = {{"status": "success", "operator": "{task.operator_type}"}}
         return result
 '''
         

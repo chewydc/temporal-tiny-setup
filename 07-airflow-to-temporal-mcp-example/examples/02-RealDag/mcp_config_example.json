@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "airflow-to-temporal": {
+      "command": "python",
+      "args": ["-m", "airflow_to_temporal_mcp"],
+      "env": {
+        "PLATFORM_CONFIG": "C:/Users/u603924/PycharmProjects/Automation/temporal-tiny-setup/07-airflow-to-temporal-mcp-example/config/platform_config.yaml"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

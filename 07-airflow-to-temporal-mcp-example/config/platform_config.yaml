@@ -114,6 +114,132 @@ centralized_activities:
       - name: "extra_vars"
         type: "dict"
         required: false
+  
+  # BigQuery Integration
+  - name: "bigquery_get_data"
+    module: "platform_sdk.bigquery"
+    function: "bigquery_get_data"
+    description: "Obtiene datos de una tabla de BigQuery"
+    triggers:
+      - "BigQueryGetDataOperator"
+      - "bigquery"
+      - "bq"
+      - "query_data"
+    parameters:
+      - name: "dataset_id"
+        type: "str"
+        required: true
+      - name: "table_id"
+        type: "str"
+        required: true
+      - name: "max_results"
+        type: "int"
+        required: false
+      - name: "gcp_conn_id"
+        type: "str"
+        required: false
+  
+  - name: "bigquery_execute_query"
+    module: "platform_sdk.bigquery"
+    function: "bigquery_execute_query"
+    description: "Ejecuta una consulta SQL en BigQuery"
+    triggers:
+      - "BigQueryExecuteQueryOperator"
+      - "bigquery_query"
+      - "bq_query"
+    parameters:
+      - name: "sql"
+        type: "str"
+        required: true
+      - name: "use_legacy_sql"
+        type: "bool"
+        default: false
+      - name: "gcp_conn_id"
+        type: "str"
+        required: false
+  
+  - name: "bigquery_insert_job"
+    module: "platform_sdk.bigquery"
+    function: "bigquery_insert_job"
+    description: "Inserta un job en BigQuery"
+    triggers:
+      - "BigQueryInsertJobOperator"
+      - "bq_insert"
+    parameters:
+      - name: "configuration"
+        type: "dict"
+        required: true
+      - name: "gcp_conn_id"
+        type: "str"
+        required: false
+  
+  # Email Integration
+  - name: "send_email"
+    module: "platform_sdk.notifications"
+    function: "send_email"
+    description: "Envía correo electrónico con soporte para adjuntos"
+    triggers:
+      - "EmailOperator"
+      - "email"
+      - "mail"
+      - "notify_email"
+    parameters:
+      - name: "to"
+        type: "list"
+        required: true
+      - name: "subject"
+        type: "str"
+        required: true
+      - name: "html_content"
+        type: "str"
+        required: false
+      - name: "files"
+        type: "list"
+        required: false
+  
+  # MongoDB Integration
+  - name: "mongodb_find"
+    module: "platform_sdk.mongodb"
+    function: "mongodb_find"
+    description: "Busca documentos en MongoDB"
+    triggers:
+      - "MongoHook"
+      - "mongodb"
+      - "mongo_find"
+    parameters:
+      - name: "connection_id"
+        type: "str"
+        required: true
+      - name: "database"
+        type: "str"
+        required: true
+      - name: "collection"
+        type: "str"
+        required: true
+      - name: "query"
+        type: "dict"
+        required: true
+  
+  - name: "mongodb_insert_many"
+    module: "platform_sdk.mongodb"
+    function: "mongodb_insert_many"
+    description: "Inserta múltiples documentos en MongoDB"
+    triggers:
+      - "mongo_insert"
+      - "mongodb_insert"
+    parameters:
+      - name: "connection_id"
+        type: "str"
+        required: true
+      - name: "database"
+        type: "str"
+        required: true
+      - name: "collection"
+        type: "str"
+        required: true
+      - name: "documents"
+        type: "list"
+        required: true
 
 # Reglas para Activities personalizadas
 custom_activities:
@@ -181,6 +307,22 @@ operator_mapping:
   
   DockerOperator:
     default: "custom_docker_activity"
+  
+  BigQueryGetDataOperator:
+    activity: "bigquery_get_data"
+    centralized: true
+  
+  BigQueryExecuteQueryOperator:
+    activity: "bigquery_execute_query"
+    centralized: true
+  
+  BigQueryInsertJobOperator:
+    activity: "bigquery_insert_job"
+    centralized: true
+  
+  EmailOperator:
+    activity: "send_email"
+    centralized: true
 
 # Configuración de Workflows generados
 workflow_config:

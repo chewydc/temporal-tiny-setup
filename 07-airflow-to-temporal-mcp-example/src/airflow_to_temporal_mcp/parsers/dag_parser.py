@@ -54,6 +54,9 @@ class DagParser:
         
         dag_info = DagInfo(dag_id="unknown")
         
+        # Primero, extraer todas las funciones definidas
+        function_definitions = self._extract_function_definitions(tree, dag_content)
+        
         # Extraer información del DAG
         for node in ast.walk(tree):
             # Buscar definición del DAG
@@ -64,7 +67,7 @@ class DagParser:
             
             # Buscar definiciones de tasks (operators)
             if isinstance(node, ast.Assign):
-                task_info = self._extract_task_info(node)
+                task_info = self._extract_task_info(node, function_definitions)
                 if task_info:
                     dag_info.tasks.append(task_info)
         
@@ -79,6 +82,26 @@ class DagParser:
         self._suggest_activities(dag_info)
         
         return dag_info
+    
+    def _extract_function_definitions(self, tree: ast.AST, source_code: str) -> dict:
+        """Extrae definiciones de funciones del código fuente"""
+        
+        functions = {}
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                func_name = node.name
+                
+                # Extraer el código fuente de la función
+                try:
+                    func_code = ast.get_source_segment(source_code, node)
+                    if func_code:
+                        functions[func_name] = func_code
+                except:
+                    # Fallback: marcar que existe pero sin código
+                    functions[func_name] = f"# Function {func_name} exists but code extraction failed"
+        
+        return functions
     
     def _extract_dag_info(self, dag_node: ast.Call) -> DagInfo:
         """Extrae información del objeto DAG"""
@@ -107,7 +130,7 @@ class DagParser:
         
         return dag_info
     
-    def _extract_task_info(self, node: ast.Assign) -> Optional[TaskInfo]:
+    def _extract_task_info(self, node: ast.Assign, function_definitions: dict) -> Optional[TaskInfo]:
         """Extrae información de un task (operator)"""
         
         if not isinstance(node.value, ast.Call):
@@ -125,20 +148,88 @@ class DagParser:
         
         # Extraer argumentos del operator
         operator_args = {}
+        nested_operators = []
+        
         for keyword in node.value.keywords:
             if keyword.arg == "task_id":
                 task_id = self._extract_string_value(keyword.value)
+            elif keyword.arg == "python_callable":
+                # Extraer nombre de la función
+                func_name = self._extract_callable_name(keyword.value)
+                operator_args["python_callable"] = func_name
+                
+                # Si tenemos el código de la función, agregarlo
+                if func_name in function_definitions:
+                    operator_args["function_code"] = function_definitions[func_name]
+                    
+                    # NUEVO: Analizar operadores anidados dentro de la función
+                    nested_operators = self._extract_nested_operators(function_definitions[func_name])
+                    if nested_operators:
+                        operator_args["nested_operators"] = nested_operators
             else:
                 operator_args[keyword.arg] = self._extract_value(keyword.value)
         
         if not task_id:
             return None
         
-        return TaskInfo(
+        task_info = TaskInfo(
             task_id=task_id,
             operator_type=operator_type,
             operator_args=operator_args
         )
+        
+        # Agregar información de operadores anidados
+        if nested_operators:
+            task_info.operator_args["has_nested_operators"] = True
+            task_info.operator_args["nested_operator_types"] = [op["type"] for op in nested_operators]
+        
+        return task_info
+    
+    def _extract_nested_operators(self, function_code: str) -> List[dict]:
+        """
+        Extrae operadores de Airflow que se usan DENTRO de una función Python
+        
+        Args:
+            function_code: Código fuente de la función
+        
+        Returns:
+            Lista de operadores encontrados con sus argumentos
+        """
+        
+        nested_operators = []
+        
+        try:
+            func_tree = ast.parse(function_code)
+        except:
+            return nested_operators
+        
+        for node in ast.walk(func_tree):
+            # Buscar llamadas a operadores dentro de la función
+            if isinstance(node, ast.Call):
+                operator_type = self._get_operator_type(node.func)
+                
+                if operator_type and operator_type.endswith("Operator"):
+                    # Extraer argumentos del operador anidado
+                    operator_info = {
+                        "type": operator_type,
+                        "args": {}
+                    }
+                    
+                    for keyword in node.keywords:
+                        operator_info["args"][keyword.arg] = self._extract_value(keyword.value)
+                    
+                    nested_operators.append(operator_info)
+        
+        return nested_operators
+    
+    def _extract_callable_name(self, node: ast.AST) -> str:
+        """Extrae el nombre de un callable"""
+        
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            return node.attr
+        return "unknown_callable"
     
     def _extract_dependencies(self, tree: ast.AST) -> dict:
         """Extrae dependencias entre tasks (>> y <<)"""
@@ -172,6 +263,38 @@ class DagParser:
             # Buscar en mapeo de operators
             operator_mapping = self.platform_rules.get_operator_mapping(task.operator_type)
             
+            # NUEVO: Si el task tiene operadores anidados, sugerirlos también
+            if task.operator_args.get("has_nested_operators"):
+                nested_types = task.operator_args.get("nested_operator_types", [])
+                nested_operators_info = task.operator_args.get("nested_operators", [])
+                
+                # Marcar que este task debe descomponerse
+                task.operator_args["should_decompose"] = True
+                task.operator_args["decomposed_activities"] = []
+                
+                # Sugerir Activities para cada operador anidado
+                for nested_op in nested_operators_info:
+                    nested_type = nested_op["type"]
+                    nested_mapping = self.platform_rules.get_operator_mapping(nested_type)
+                    
+                    if nested_mapping:
+                        # Si tiene activity centralizada, usarla
+                        if "activity" in nested_mapping:
+                            task.operator_args["decomposed_activities"].append({
+                                "operator": nested_type,
+                                "activity": nested_mapping["activity"],
+                                "is_centralized": nested_mapping.get("centralized", False),
+                                "args": nested_op["args"]
+                            })
+                        else:
+                            # Usar default
+                            task.operator_args["decomposed_activities"].append({
+                                "operator": nested_type,
+                                "activity": nested_mapping.get("default", f"custom_{nested_type.lower()}"),
+                                "is_centralized": False,
+                                "args": nested_op["args"]
+                            })
+            
             if operator_mapping:
                 # Analizar patrones en los argumentos
                 for pattern_rule in operator_mapping.get("patterns", []):
@@ -189,7 +312,12 @@ class DagParser:
                 
                 # Si no hay match, usar default
                 if not task.suggested_activity:
-                    task.suggested_activity = operator_mapping.get("default", task.task_id)
+                    # Si tiene activity centralizada directa
+                    if "activity" in operator_mapping:
+                        task.suggested_activity = operator_mapping["activity"]
+                        task.is_centralized = operator_mapping.get("centralized", False)
+                    else:
+                        task.suggested_activity = operator_mapping.get("default", task.task_id)
             else:
                 task.suggested_activity = task.task_id
     
