@@ -3,6 +3,15 @@ echo ============================================================
 echo Airflow 3 HA PoC - MariaDB + MaxScale
 echo ============================================================
 
+if not exist airflow.cfg (
+    echo Creando airflow.cfg desde ejemplo...
+    copy airflow.cfg.example airflow.cfg > nul
+)
+if not exist .env (
+    echo Creando .env desde ejemplo...
+    copy .env.example .env > nul
+)
+
 echo Limpiando containers anteriores...
 docker-compose down -v --remove-orphans > nul 2>&1
 docker system prune -f > nul 2>&1

@@ -13,6 +13,7 @@ Tiny-Setup/
 ├── 05-multitenant/               # Arquitectura multitenant
 ├── 06-life-cycle-example/        # Ciclo de vida con Kubernetes
 ├── 07-airflow-to-temporal-mcp-example/  # MCP Server para migración Airflow→Temporal
+├── 08-Airflow3-HA-MariadB/              # Airflow 3 HA con MariaDB + MaxScale
 └── README.md                     # Este archivo
 ```
 
@@ -53,6 +54,12 @@ Tiny-Setup/
 - **Objetivo**: Herramienta de migración automática de DAGs de Airflow a Workflows de Temporal
 - **Qué hace**: MCP Server que analiza DAGs de Airflow y genera automáticamente código de Temporal equivalente (workflows, activities, workers). Facilita la migración masiva de procesos existentes.
 - **Características**: Análisis de DAGs, generación de código, patrones de migración, SDK público/privado
+
+### [Caso 08: Airflow 3 HA con MariaDB + MaxScale](./08-Airflow3-HA-MariadB/)
+- **Tecnologías**: Airflow 3.x, MariaDB, MaxScale, Redis, Celery
+- **Objetivo**: PoC de Airflow 3 en alta disponibilidad con base de datos replicada y failover automático
+- **Qué hace**: Despliega Airflow 3.x con API Server, Scheduler y 2 Workers usando CeleryExecutor. MariaDB Primary/Replica con replicación GTID y MaxScale como proxy con read/write split y failover automático.
+- **Características**: HA con failover automático, read/write split, workers escalables, sin autenticación (SimpleAuthManager)
 
 ## 🚀 Inicio Rápido
 
