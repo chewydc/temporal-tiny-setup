@@ -1,0 +1,221 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:3.1.8-python3.11
+  environment:
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale:4006/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale:4006/airflow
+    AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "10"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./airflow.cfg:/opt/airflow/airflow.cfg
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    mariadb-primary:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - airflow-net
+
+services:
+
+  mariadb-primary:
+    image: mariadb:10.11
+    container_name: mariadb-primary
+    hostname: mariadb-primary
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pass
+      MYSQL_DATABASE: airflow
+      MYSQL_USER: airflow
+      MYSQL_PASSWORD: airflow_pass
+    volumes:
+      - ./mariadb/primary/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mariadb-primary-data:/var/lib/mysql
+    command: >
+      --server-id=1
+      --log-bin=mariadb-bin
+      --binlog-format=ROW
+      --gtid-strict-mode=ON
+      --log-slave-updates=ON
+      --innodb-flush-log-at-trx-commit=1
+      --sync-binlog=1
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - airflow-net
+
+  mariadb-replica:
+    image: mariadb:10.11
+    container_name: mariadb-replica
+    hostname: mariadb-replica
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pass
+      MYSQL_DATABASE: airflow
+      MYSQL_USER: airflow
+      MYSQL_PASSWORD: airflow_pass
+    volumes:
+      - ./mariadb/replica/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mariadb-replica-data:/var/lib/mysql
+    command: >
+      --server-id=2
+      --log-bin=mariadb-bin
+      --binlog-format=ROW
+      --gtid-strict-mode=ON
+      --log-slave-updates=ON
+      --read-only=ON
+    depends_on:
+      mariadb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - airflow-net
+
+  maxscale:
+    image: mariadb/maxscale:24.02
+    container_name: maxscale
+    hostname: maxscale
+    user: "0:0"
+    environment:
+      - MAXSCALE_DISABLE_MONIT=1
+    volumes:
+      - ./maxscale/maxscale_minimal.cnf:/etc/maxscale.cnf:ro
+    ports:
+      - "4006:4006"
+      - "8989:8989"
+    depends_on:
+      mariadb-primary:
+        condition: service_healthy
+      mariadb-replica:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "maxctrl", "list", "servers"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      sh -c '
+        echo "Starting MaxScale..."
+        rm -f /etc/monit/monitrc /etc/monit.d/* 2>/dev/null || true
+        killall monit 2>/dev/null || true
+        maxscale --nodaemon --user=root --log=stdout
+      '
+    networks:
+      - airflow-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - airflow-net
+
+  airflow-init:
+    image: apache/airflow:3.1.8-python3.11
+    container_name: airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale:4006/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale:4006/airflow
+      AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "10"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
+      _AIRFLOW_DB_MIGRATE: "true"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./airflow.cfg:/opt/airflow/airflow.cfg
+      - airflow-logs:/opt/airflow/logs
+    depends_on:
+      mariadb-primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      maxscale:
+        condition: service_healthy
+    networks:
+      - airflow-net
+    entrypoint: ["/usr/bin/dumb-init", "--"]
+    command:
+      - bash
+      - -c
+      - |
+        echo "=== Airflow 3.x DB Migration ==="
+        airflow db migrate
+        echo "=== Init Complete ==="
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: airflow-apiserver
+    hostname: airflow-apiserver
+    command: api-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    hostname: airflow-scheduler
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-worker-1:
+    <<: *airflow-common
+    container_name: airflow-worker-1
+    hostname: airflow-worker-1
+    command: celery worker
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-worker-2:
+    <<: *airflow-common
+    container_name: airflow-worker-2
+    hostname: airflow-worker-2
+    command: celery worker
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  mariadb-primary-data:
+  mariadb-replica-data:
+  airflow-logs:
+
+networks:
+  airflow-net:
+    driver: bridge
