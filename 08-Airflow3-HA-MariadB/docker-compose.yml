@@ -62,9 +62,6 @@ services:
     hostname: mariadb-replica
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
-      MYSQL_DATABASE: airflow
-      MYSQL_USER: airflow
-      MYSQL_PASSWORD: airflow_pass
     volumes:
       - ./mariadb/replica/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mariadb-replica-data:/var/lib/mysql

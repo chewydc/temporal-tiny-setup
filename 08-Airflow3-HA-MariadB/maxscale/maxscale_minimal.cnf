@@ -12,6 +12,9 @@ servers=mariadb-primary,mariadb-replica
 user=maxscale_monitor
 password=maxscale_monitor_pass
 monitor_interval=5s
+auto_failover=true
+auto_rejoin=true
+failcount=3
 
 # Service
 [ReadWriteSplit-Service]

@@ -10,3 +10,6 @@ CHANGE MASTER TO
     MASTER_USE_GTID=slave_pos;
 
 START SLAVE;
+
+-- Esperar a que la replicacion sincronice los usuarios del primary
+SELECT SLEEP(5);
