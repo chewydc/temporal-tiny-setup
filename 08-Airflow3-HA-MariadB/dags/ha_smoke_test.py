@@ -35,13 +35,13 @@ def simple_host_check(**context):
 
 
 with DAG(
-    dag_id="simple_failover_test",
-    description="DAG simple para probar failover",
+    dag_id="ha_smoke_test",
+    description="Smoke test de infraestructura HA",
     schedule=None,  # Solo ejecución manual
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,
-    tags=["ha", "test", "simple"],
+    tags=["ha", "test", "smoke"],
     default_args={
         "retries": 1,
         "retry_delay": timedelta(seconds=5),
