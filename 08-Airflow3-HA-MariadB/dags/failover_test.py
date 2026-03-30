@@ -77,7 +77,7 @@ def final_validation(**context):
 
 
 with DAG(
-    dag_id="live_failover_test",
+    dag_id="failover_test",
     description="DAG largo para probar failover en vivo - 2 min de duracion",
     schedule=None,
     start_date=datetime(2025, 1, 1),

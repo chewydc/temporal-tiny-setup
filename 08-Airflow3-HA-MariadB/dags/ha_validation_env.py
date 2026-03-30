@@ -35,8 +35,8 @@ def simple_host_check(**context):
 
 
 with DAG(
-    dag_id="ha_smoke_test",
-    description="Smoke test de infraestructura HA",
+    dag_id="ha_validation_env",
+    description="Validacion del entorno HA",
     schedule=None,  # Solo ejecución manual
     start_date=datetime(2025, 1, 1),
     catchup=False,
