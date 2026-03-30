@@ -16,11 +16,12 @@ logger = logging.getLogger(__name__)
 
 def _db_op_with_retry(func, max_retries=5, delay=5):
     """Ejecuta una operación de DB con reintentos para sobrevivir failover."""
+    log = logging.getLogger("airflow.task")
     for attempt in range(max_retries):
         try:
             return func()
         except Exception as e:
-            logger.warning(f"  [RETRY {attempt+1}/{max_retries}] {e}")
+            log.warning(f"[RETRY {attempt+1}/{max_retries}] {e}")
             if attempt < max_retries - 1:
                 time.sleep(delay)
     raise Exception(f"Failed after {max_retries} retries")
