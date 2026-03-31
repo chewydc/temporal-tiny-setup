@@ -13,7 +13,8 @@ Tiny-Setup/
 ├── 05-multitenant/               # Arquitectura multitenant
 ├── 06-life-cycle-example/        # Ciclo de vida con Kubernetes
 ├── 07-airflow-to-temporal-mcp-example/  # MCP Server para migración Airflow→Temporal
-├── 08-Airflow3-HA-MariadB/              # Airflow 3 HA con MariaDB + MaxScale
+├── 08-Airflow3-MaxScale-MariaDB/         # Airflow 3 HA con MariaDB + MaxScale
+├── 09-Airflow3-HA-Galera-MariaDB/        # Airflow 3 HA con Galera Cluster (3 regiones)
 └── README.md                     # Este archivo
 ```
 
@@ -60,6 +61,12 @@ Tiny-Setup/
 - **Objetivo**: PoC de Airflow 3 en alta disponibilidad con base de datos replicada y failover automático
 - **Qué hace**: Despliega Airflow 3.x con API Server, Scheduler y 2 Workers usando CeleryExecutor. MariaDB Primary/Replica con replicación GTID y MaxScale como proxy con read/write split y failover automático.
 - **Características**: HA con failover automático, read/write split, workers escalables, sin autenticación (SimpleAuthManager)
+
+### [Caso 09: Airflow 3 HA con Galera Cluster (3 Regiones)](09-Airflow3-HA-Galera-MariaDB/)
+- **Tecnologías**: Airflow 3.x, MariaDB Galera Cluster, Redis, Celery
+- **Objetivo**: PoC de Airflow 3 en alta disponibilidad con Galera Cluster puro distribuido en 3 regiones geográficas
+- **Qué hace**: Despliega Airflow 3.x HA en 2 regiones (Hornos/SanLorenzo) con Galera Cluster de 3 nodos (2 datos + 1 arbitrator en Tucumán). Simula fallos de conectividad entre regiones para probar failover automático sin MaxScale.
+- **Características**: Galera multi-master, quorum automático, 3 redes separadas, control de conectividad, failover transparente
 
 ## 🚀 Inicio Rápido
 
