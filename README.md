@@ -55,7 +55,7 @@ Tiny-Setup/
 - **Qué hace**: MCP Server que analiza DAGs de Airflow y genera automáticamente código de Temporal equivalente (workflows, activities, workers). Facilita la migración masiva de procesos existentes.
 - **Características**: Análisis de DAGs, generación de código, patrones de migración, SDK público/privado
 
-### [Caso 08: Airflow 3 HA con MariaDB + MaxScale](./08-Airflow3-HA-MariadB/)
+### [Caso 08: Airflow 3 HA con MariaDB + MaxScale](08-Airflow3-MaxScale-MariaDB/)
 - **Tecnologías**: Airflow 3.x, MariaDB, MaxScale, Redis, Celery
 - **Objetivo**: PoC de Airflow 3 en alta disponibilidad con base de datos replicada y failover automático
 - **Qué hace**: Despliega Airflow 3.x con API Server, Scheduler y 2 Workers usando CeleryExecutor. MariaDB Primary/Replica con replicación GTID y MaxScale como proxy con read/write split y failover automático.
