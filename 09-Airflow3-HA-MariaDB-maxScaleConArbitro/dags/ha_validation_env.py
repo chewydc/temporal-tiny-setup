@@ -3,80 +3,42 @@ DAG simple para probar failover de MariaDB + MaxScale.
 """
 from datetime import datetime, timedelta
 import socket
-import mysql.connector
 
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.standard.operators.bash import BashOperator
-from airflow.hooks.base import BaseHook
 
 
 def simple_db_test(**context):
-    """Test simple de conexión a la DB usando MaxScale."""
+    """Test simple de conexión a la DB usando subprocess."""
+    import subprocess
     try:
-        # Conectar directamente a MaxScale
-        connection = mysql.connector.connect(
-            host='maxscale-hornos',
-            port=4006,
-            user='airflow',
-            password='airflow_pass',
-            database='airflow'
-        )
-        
-        cursor = connection.cursor()
-        cursor.execute("SELECT 1 as test, @@hostname as db_host, NOW() as timestamp")
-        result = cursor.fetchone()
-        cursor.close()
-        connection.close()
+        # Usar mysql client desde el sistema
+        result = subprocess.run([
+            'mysql', 
+            '-h', 'maxscale-hornos', 
+            '-P', '4006',
+            '-u', 'airflow',
+            '-pairflow_pass',
+            '-e', 'SELECT 1 as test, @@hostname as db_host, NOW() as timestamp;'
+        ], capture_output=True, text=True, timeout=10)
         
         hostname = socket.gethostname()
-        print(f"[DB-TEST] SUCCESS from worker {hostname}")
-        print(f"[DB-TEST] Connected to DB host: {result[1]}")
-        print(f"[DB-TEST] Query result: {result[0]}, Timestamp: {result[2]}")
-        
-        return {
-            "status": "success", 
-            "worker_host": hostname, 
-            "db_host": result[1],
-            "test_result": result[0],
-            "timestamp": str(result[2])
-        }
+        if result.returncode == 0:
+            print(f"[DB-TEST] SUCCESS from worker {hostname}")
+            print(f"[DB-TEST] Query output: {result.stdout}")
+            return {
+                "status": "success", 
+                "worker_host": hostname, 
+                "output": result.stdout.strip()
+            }
+        else:
+            print(f"[DB-TEST] ERROR from worker {hostname}: {result.stderr}")
+            return {"status": "error", "worker_host": hostname, "error": result.stderr}
         
     except Exception as e:
         hostname = socket.gethostname()
         print(f"[DB-TEST] ERROR from worker {hostname}: {e}")
-        return {"status": "error", "worker_host": hostname, "error": str(e)}
-
-
-def maxscale_status_test(**context):
-    """Test de estado de MaxScale via API."""
-    try:
-        import requests
-        
-        # Probar ambos MaxScale
-        results = {}
-        
-        for name, port in [("hornos", 8989), ("sanlorenzo", 8990)]:
-            try:
-                response = requests.get(f"http://maxscale-{name}:{port}/v1/servers", timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    servers = [(s["id"], s["attributes"]["state"]) for s in data["data"]]
-                    results[name] = {"status": "success", "servers": servers}
-                    print(f"[MAXSCALE-{name.upper()}] SUCCESS: {servers}")
-                else:
-                    results[name] = {"status": "error", "error": f"HTTP {response.status_code}"}
-                    print(f"[MAXSCALE-{name.upper()}] ERROR: HTTP {response.status_code}")
-            except Exception as e:
-                results[name] = {"status": "error", "error": str(e)}
-                print(f"[MAXSCALE-{name.upper()}] ERROR: {e}")
-        
-        hostname = socket.gethostname()
-        return {"worker_host": hostname, "maxscale_results": results}
-        
-    except Exception as e:
-        hostname = socket.gethostname()
-        print(f"[MAXSCALE-TEST] ERROR from worker {hostname}: {e}")
         return {"status": "error", "worker_host": hostname, "error": str(e)}
 
 
@@ -108,23 +70,33 @@ with DAG(
         python_callable=simple_host_check,
     )
 
-    # Test de DB via MaxScale
+    # Test de DB via MaxScale usando mysql client
     db_task = PythonOperator(
         task_id="test_database",
         python_callable=simple_db_test,
     )
 
-    # Test de MaxScale API
-    maxscale_task = PythonOperator(
+    # Test de conectividad con curl
+    maxscale_test = BashOperator(
         task_id="test_maxscale_api",
-        python_callable=maxscale_status_test,
+        bash_command='''
+        echo "[MAXSCALE-TEST] Testing APIs from $(hostname)"
+        echo "=== MaxScale Hornos ==="
+        curl -s http://maxscale-hornos:8989/v1/servers | head -20 || echo "ERROR: Cannot reach MaxScale Hornos"
+        echo "=== MaxScale San Lorenzo ==="
+        curl -s http://maxscale-sanlorenzo:8990/v1/servers | head -20 || echo "ERROR: Cannot reach MaxScale San Lorenzo"
+        ''',
     )
 
     # Comando bash con info del sistema
     bash_task = BashOperator(
         task_id="system_info",
-        bash_command='echo "[SYSTEM] Worker: $(hostname) | Date: $(date) | MaxScale Hornos: $(nslookup maxscale-hornos | grep Address | tail -1)"',
+        bash_command='''
+        echo "[SYSTEM] Worker: $(hostname) | Date: $(date)"
+        echo "[NETWORK] MaxScale Hornos IP: $(nslookup maxscale-hornos | grep Address | tail -1 | cut -d: -f2)"
+        echo "[NETWORK] MaxScale San Lorenzo IP: $(nslookup maxscale-sanlorenzo | grep Address | tail -1 | cut -d: -f2)"
+        ''',
     )
 
     # Ejecutar en paralelo para probar distribución de workers
-    [host_task, db_task, maxscale_task, bash_task]
+    [host_task, db_task, maxscale_test, bash_task]
