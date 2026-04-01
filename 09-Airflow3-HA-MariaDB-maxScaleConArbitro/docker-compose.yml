@@ -27,6 +27,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./dags:/opt/airflow/dags
     - ./airflow.cfg:/opt/airflow/airflow.cfg
+    - ./requirements.txt:/requirements.txt
     - airflow-logs:/opt/airflow/logs
   depends_on:
     mariadb-hornos:
@@ -35,6 +36,15 @@ x-airflow-common: &airflow-common
       condition: service_healthy
   networks:
     - net-hornos
+  user: "50000:0"
+  entrypoint: ["/usr/bin/dumb-init", "--"]
+  command:
+    - bash
+    - -c
+    - |
+      pip install -r /requirements.txt
+      exec "$@"
+    - bash
 
 services:
 
@@ -321,6 +331,7 @@ services:
     volumes:
       - ./dags:/opt/airflow/dags
       - ./airflow.cfg:/opt/airflow/airflow.cfg
+      - ./requirements.txt:/requirements.txt
       - airflow-logs:/opt/airflow/logs
     depends_on:
       mariadb-hornos:
@@ -336,6 +347,7 @@ services:
       - bash
       - -c
       - |
+        pip install -r /requirements.txt
         echo "=== Airflow 3.x DB Migration ==="
         airflow db migrate
         echo "=== Init Complete ==="
