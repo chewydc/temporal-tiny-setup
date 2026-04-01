@@ -1,7 +1,11 @@
 # ============================================================================
-# AIRFLOW 3.x HA + MAXSCALE + 3 REGIONES (SIMPLIFICADO)
+# AIRFLOW 3.x HA + MAXSCALE + 3 REGIONES - CONFIGURACIÓN ORIGINAL
 # ============================================================================
-# Basado en caso 08 que funciona + 3 regiones + arbitrator
+# 3 redes: Hornos, San Lorenzo, Tucumán
+# MariaDB en cada sitio
+# MaxScale en Hornos y San Lorenzo
+# Tucumán nunca se promueve a master (solo arbitrator)
+# Airflow completo funcionando
 # ============================================================================
 
 x-airflow-common: &airflow-common
@@ -9,7 +13,7 @@ x-airflow-common: &airflow-common
   environment:
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
-    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CELERY__BROKER_URL: redis://redis-hornos:6379/0
     AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-hornos:4006/airflow
     AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
@@ -25,12 +29,12 @@ x-airflow-common: &airflow-common
     - ./airflow.cfg:/opt/airflow/airflow.cfg
     - airflow-logs:/opt/airflow/logs
   depends_on:
-    mariadb-primary:
+    mariadb-hornos:
       condition: service_healthy
-    redis:
+    redis-hornos:
       condition: service_healthy
-    maxscale-hornos:
-      condition: service_healthy
+  networks:
+    - net-hornos
 
 services:
 
@@ -50,9 +54,9 @@ services:
         
         echo "=== VROUTER READY ===" &&
         echo "Routing configurado entre:" &&
-        echo "  Hornos: 172.20.0.0/24 (gateway 172.20.0.1)" &&
-        echo "  SanLorenzo: 172.21.0.0/24 (gateway 172.21.0.1)" &&
-        echo "  Tucuman: 172.22.0.0/24 (gateway 172.22.0.1)" &&
+        echo "  Hornos: 172.20.0.0/24" &&
+        echo "  SanLorenzo: 172.21.0.0/24" &&
+        echo "  Tucuman: 172.22.0.0/24" &&
         
         tail -f /dev/null
       '
@@ -65,15 +69,12 @@ services:
         ipv4_address: 172.22.0.10
 
   # ========================================================================
-  # MARIADB - 3 NODOS
+  # MARIADB - HORNOS (PRIMARY)
   # ========================================================================
-
-  mariadb-primary:
+  mariadb-hornos:
     image: mariadb:10.11
-    container_name: mariadb-primary
-    hostname: mariadb-primary
-    cap_add:
-      - NET_ADMIN
+    container_name: mariadb-hornos
+    hostname: mariadb-hornos
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
       MYSQL_DATABASE: airflow
@@ -81,7 +82,7 @@ services:
       MYSQL_PASSWORD: airflow_pass
     volumes:
       - ./mariadb/primary/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mariadb-primary-data:/var/lib/mysql
+      - mariadb-hornos-data:/var/lib/mysql
     command: >
       --server-id=1
       --log-bin=mariadb-bin
@@ -90,14 +91,6 @@ services:
       --log-slave-updates=ON
       --innodb-flush-log-at-trx-commit=1
       --sync-binlog=1
-    entrypoint: >
-      sh -c '
-        /usr/local/bin/docker-entrypoint.sh --server-id=1 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --innodb-flush-log-at-trx-commit=1 --sync-binlog=1 &
-        sleep 15 &&
-        ip route add 172.21.0.0/24 via 172.20.0.10 &&
-        ip route add 172.22.0.0/24 via 172.20.0.10 &&
-        wait
-      '
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -110,37 +103,32 @@ services:
     ports:
       - "3306:3306"
 
-  mariadb-replica:
+  # ========================================================================
+  # MARIADB - SAN LORENZO (REPLICA)
+  # ========================================================================
+  mariadb-sanlorenzo:
     image: mariadb:10.11
-    container_name: mariadb-replica
-    hostname: mariadb-replica
-    cap_add:
-      - NET_ADMIN
+    container_name: mariadb-sanlorenzo
+    hostname: mariadb-sanlorenzo
+    privileged: true
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - ./mariadb/replica/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mariadb-replica-data:/var/lib/mysql
-    command: >
-      --server-id=2
-      --log-bin=mariadb-bin
-      --binlog-format=ROW
-      --gtid-strict-mode=ON
-      --log-slave-updates=ON
-      --read-only=ON
-    entrypoint: >
-      sh -c '
-        /usr/local/bin/docker-entrypoint.sh --server-id=2 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON &
-        sleep 15 &&
-        ip route add 172.20.0.0/24 via 172.21.0.10 &&
-        ip route add 172.22.0.0/24 via 172.21.0.10 &&
-        wait
-      '
+      - mariadb-sanlorenzo-data:/var/lib/mysql
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Configurar rutas de red
+        ip route add 172.20.0.0/24 via 172.21.0.10 2>/dev/null || true
+        ip route add 172.22.0.0/24 via 172.21.0.10 2>/dev/null || true
+        
+        # Iniciar MariaDB
+        exec docker-entrypoint.sh --server-id=2 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON
     depends_on:
-      mariadb-primary:
+      mariadb-hornos:
         condition: service_healthy
-      vrouter:
-        condition: service_started
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -153,37 +141,32 @@ services:
     ports:
       - "3307:3306"
 
-  mariadb-arbitrator:
+  # ========================================================================
+  # MARIADB - TUCUMAN (ARBITRATOR - NUNCA MASTER)
+  # ========================================================================
+  mariadb-tucuman:
     image: mariadb:10.11
-    container_name: mariadb-arbitrator
-    hostname: mariadb-arbitrator
-    cap_add:
-      - NET_ADMIN
+    container_name: mariadb-tucuman
+    hostname: mariadb-tucuman
+    privileged: true
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - ./mariadb/arbitrator/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mariadb-arbitrator-data:/var/lib/mysql
-    command: >
-      --server-id=3
-      --log-bin=mariadb-bin
-      --binlog-format=ROW
-      --gtid-strict-mode=ON
-      --log-slave-updates=ON
-      --read-only=ON
-    entrypoint: >
-      sh -c '
-        /usr/local/bin/docker-entrypoint.sh --server-id=3 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON &
-        sleep 15 &&
-        ip route add 172.20.0.0/24 via 172.22.0.10 &&
-        ip route add 172.21.0.0/24 via 172.22.0.10 &&
-        wait
-      '
+      - mariadb-tucuman-data:/var/lib/mysql
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Configurar rutas de red
+        ip route add 172.20.0.0/24 via 172.22.0.10 2>/dev/null || true
+        ip route add 172.21.0.0/24 via 172.22.0.10 2>/dev/null || true
+        
+        # Iniciar MariaDB (SOLO ARBITRATOR - NUNCA MASTER)
+        exec docker-entrypoint.sh --server-id=3 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON
     depends_on:
-      mariadb-primary:
+      mariadb-hornos:
         condition: service_healthy
-      vrouter:
-        condition: service_started
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -197,109 +180,125 @@ services:
       - "3308:3306"
 
   # ========================================================================
-  # MAXSCALE - En ambas regiones (Hornos y San Lorenzo)
+  # MAXSCALE - HORNOS (conectado a todas las redes vía VRouter)
   # ========================================================================
-
   maxscale-hornos:
     image: mariadb/maxscale:24.02
     container_name: maxscale-hornos
     hostname: maxscale-hornos
     user: "0:0"
+    privileged: true
     environment:
       - MAXSCALE_DISABLE_MONIT=1
     volumes:
-      - ./maxscale/maxscale_3nodos.cnf:/etc/maxscale.cnf:ro
+      - ./maxscale/maxscale_hornos.cnf:/etc/maxscale.cnf:ro
     ports:
       - "4006:4006"
       - "8989:8989"
     depends_on:
-      mariadb-primary:
+      mariadb-hornos:
         condition: service_healthy
-      mariadb-replica:
+      mariadb-sanlorenzo:
         condition: service_healthy
-      mariadb-arbitrator:
+      mariadb-tucuman:
         condition: service_healthy
+      vrouter:
+        condition: service_started
     healthcheck:
       test: ["CMD", "maxctrl", "list", "servers"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: >
-      sh -c '
-        echo "Starting MaxScale (Hornos)..."
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Configurar rutas a través del VRouter para acceder a todas las redes
+        ip route add 172.21.0.0/24 via 172.20.0.10 2>/dev/null || true
+        ip route add 172.22.0.0/24 via 172.20.0.10 2>/dev/null || true
+        
+        echo "Starting MaxScale Hornos con conectividad completa..."
         rm -f /etc/monit/monitrc /etc/monit.d/* 2>/dev/null || true
         killall monit 2>/dev/null || true
         maxscale --nodaemon --user=root --log=stdout
-      '
     networks:
-      - net-hornos
-      - net-sanlorenzo
-      - net-tucuman
+      net-hornos:
+        ipv4_address: 172.20.0.25
 
+  # ========================================================================
+  # MAXSCALE - SAN LORENZO (conectado a todas las redes vía VRouter)
+  # ========================================================================
   maxscale-sanlorenzo:
     image: mariadb/maxscale:24.02
     container_name: maxscale-sanlorenzo
     hostname: maxscale-sanlorenzo
     user: "0:0"
+    privileged: true
     environment:
       - MAXSCALE_DISABLE_MONIT=1
     volumes:
-      - ./maxscale/maxscale_3nodos.cnf:/etc/maxscale.cnf:ro
+      - ./maxscale/maxscale_sanlorenzo.cnf:/etc/maxscale.cnf:ro
     ports:
       - "4007:4006"
       - "8990:8989"
     depends_on:
-      mariadb-primary:
+      mariadb-hornos:
         condition: service_healthy
-      mariadb-replica:
+      mariadb-sanlorenzo:
         condition: service_healthy
-      mariadb-arbitrator:
+      mariadb-tucuman:
         condition: service_healthy
+      vrouter:
+        condition: service_started
     healthcheck:
       test: ["CMD", "maxctrl", "list", "servers"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    command: >
-      sh -c '
-        echo "Starting MaxScale (San Lorenzo)..."
+      start_period: 35s
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Configurar rutas a través del VRouter para acceder a todas las redes
+        ip route add 172.20.0.0/24 via 172.21.0.10 2>/dev/null || true
+        ip route add 172.22.0.0/24 via 172.21.0.10 2>/dev/null || true
+        
+        echo "Starting MaxScale San Lorenzo con conectividad completa..."
         rm -f /etc/monit/monitrc /etc/monit.d/* 2>/dev/null || true
         killall monit 2>/dev/null || true
         maxscale --nodaemon --user=root --log=stdout
-      '
     networks:
-      - net-sanlorenzo
-      - net-hornos
-      - net-tucuman
+      net-sanlorenzo:
+        ipv4_address: 172.21.0.25
 
   # ========================================================================
-  # REDIS - En región Hornos
+  # REDIS - HORNOS
   # ========================================================================
-
-  redis:
+  redis-hornos:
     image: redis:7-alpine
-    container_name: redis
+    container_name: redis-hornos
+    hostname: redis-hornos
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     networks:
-      - net-hornos
+      net-hornos:
+        ipv4_address: 172.20.0.30
 
   # ========================================================================
-  # AIRFLOW - En región Hornos (Principal)
+  # AIRFLOW - INICIALIZACIÓN
   # ========================================================================
-
   airflow-init:
     image: apache/airflow:3.1.8-python3.11
     container_name: airflow-init
     environment:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://redis-hornos:6379/0
       AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-hornos:4006/airflow
       AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
@@ -316,9 +315,9 @@ services:
       - ./airflow.cfg:/opt/airflow/airflow.cfg
       - airflow-logs:/opt/airflow/logs
     depends_on:
-      mariadb-primary:
+      mariadb-hornos:
         condition: service_healthy
-      redis:
+      redis-hornos:
         condition: service_healthy
       maxscale-hornos:
         condition: service_healthy
@@ -334,6 +333,9 @@ services:
         echo "=== Init Complete ==="
     restart: "no"
 
+  # ========================================================================
+  # AIRFLOW - COMPONENTES
+  # ========================================================================
   airflow-apiserver:
     <<: *airflow-common
     container_name: airflow-apiserver
@@ -344,8 +346,6 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - net-hornos
     restart: unless-stopped
 
   airflow-scheduler:
@@ -356,8 +356,6 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - net-hornos
     restart: unless-stopped
 
   airflow-dag-processor:
@@ -368,43 +366,32 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - net-hornos
     restart: unless-stopped
 
-  airflow-worker-hornos:
+  airflow-worker-1:
     <<: *airflow-common
-    container_name: airflow-worker-hornos
-    hostname: airflow-worker-hornos
+    container_name: airflow-worker-1
+    hostname: airflow-worker-1
     command: celery worker
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - net-hornos
     restart: unless-stopped
 
-  # ========================================================================
-  # AIRFLOW WORKER - En región San Lorenzo
-  # ========================================================================
-
-  airflow-worker-sanlorenzo:
+  airflow-worker-2:
     <<: *airflow-common
-    container_name: airflow-worker-sanlorenzo
-    hostname: airflow-worker-sanlorenzo
+    container_name: airflow-worker-2
+    hostname: airflow-worker-2
     command: celery worker
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - net-sanlorenzo
-      - net-hornos  # Para acceder a MaxScale y Redis
     restart: unless-stopped
 
 volumes:
-  mariadb-primary-data:
-  mariadb-replica-data:
-  mariadb-arbitrator-data:
+  mariadb-hornos-data:
+  mariadb-sanlorenzo-data:
+  mariadb-tucuman-data:
   airflow-logs:
 
 networks:
@@ -413,16 +400,18 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/24
-          gateway: 172.20.0.254
+          gateway: 172.20.0.1
+  
   net-sanlorenzo:
     driver: bridge
     ipam:
       config:
         - subnet: 172.21.0.0/24
-          gateway: 172.21.0.254
+          gateway: 172.21.0.1
+  
   net-tucuman:
     driver: bridge
     ipam:
       config:
         - subnet: 172.22.0.0/24
-          gateway: 172.22.0.254
+          gateway: 172.22.0.1

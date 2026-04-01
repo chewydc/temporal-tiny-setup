@@ -1,4 +1,4 @@
-# Airflow 3.x HA + MaxScale + 3 Regiones
+# Airflow 3.x HA + MaxScale + 3 Regiones - FUNCIONANDO ✅
 
 ## Arquitectura
 
@@ -7,12 +7,12 @@
 │   HORNOS        │    │  SAN LORENZO    │    │   TUCUMAN       │
 │ (172.20.0.0/24) │    │ (172.21.0.0/24) │    │ (172.22.0.0/24) │
 ├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ Airflow API     │    │ Airflow API     │    │                 │
-│ Airflow Sched   │    │ (Sched OFF)     │    │                 │
-│ Airflow Worker  │    │ Airflow Worker  │    │                 │
-│ Redis           │    │ Redis           │    │                 │
+│ Airflow API     │    │                 │    │                 │
+│ Airflow Sched   │    │                 │    │                 │
+│ Airflow Worker  │    │                 │    │                 │
+│ Redis           │    │                 │    │                 │
 │ MariaDB Primary │    │ MariaDB Replica │    │ MariaDB Arbitr. │
-│ MaxScale        │    │                 │    │ (NUNCA MASTER)  │
+│ MaxScale        │    │ MaxScale        │    │ (NUNCA MASTER)  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -23,32 +23,33 @@
                     └─────────────────┘
 ```
 
-## Características
+## Características ✅
 
 - **MaxScale con 3 Regiones**: Primary/Replica + Arbitrator
 - **Failover Automático**: MaxScale detecta fallos y promueve replicas
 - **Arbitrator Dedicado**: Tucumán solo para desempate (nunca master)
-- **Airflow HA**: Scheduler activo en Hornos, standby en San Lorenzo
-- **Simulación de Fallos**: Control de conectividad por región
+- **Conectividad Multi-Red**: Cada MaxScale conectado a todas las redes vía VRouter
+- **Replicación Funcionando**: Master-Slave correctamente configurado
+- **Control de Tráfico**: Preparado para iptables en VRouter
 
 ## Componentes
 
 ### Región Hornos (172.20.0.0/24) - PRINCIPAL
-- Airflow completo (API, Scheduler, Worker)
+- Airflow completo (API, Scheduler, DAG Processor, Workers)
 - Redis local
-- MariaDB Primary
-- MaxScale (maneja todo el routing)
+- MariaDB Primary (Master)
+- MaxScale (conectado a todas las redes)
 - Puerto 8080 (Airflow UI)
 - Puerto 3306 (MariaDB)
 - Puerto 4006 (MaxScale)
 - Puerto 8989 (MaxScale Admin)
 
-### Región San Lorenzo (172.21.0.0/24) - STANDBY
-- Airflow API + Worker (Scheduler APAGADO)
-- Redis local
-- MariaDB Replica
-- Puerto 8081 (Airflow UI)
+### Región San Lorenzo (172.21.0.0/24) - REPLICA
+- MariaDB Replica (Slave)
+- MaxScale (conectado a todas las redes)
 - Puerto 3307 (MariaDB)
+- Puerto 4007 (MaxScale)
+- Puerto 8990 (MaxScale Admin)
 
 ### Región Tucumán (172.22.0.0/24) - ARBITRATOR
 - Solo MariaDB configurado como arbitrator
@@ -76,12 +77,14 @@ network-control.bat status
 
 ## Accesos
 
-- **Airflow Hornos (Principal)**: http://localhost:8080
-- **Airflow San Lorenzo (Standby)**: http://localhost:8081
-- **MaxScale Admin**: http://localhost:8989
-- **MariaDB Hornos**: localhost:3306
-- **MariaDB San Lorenzo**: localhost:3307
-- **MariaDB Tucumán**: localhost:3308
+- **Airflow (Principal)**: http://localhost:8080
+- **MaxScale Hornos Admin**: http://localhost:8989
+- **MaxScale San Lorenzo Admin**: http://localhost:8990
+- **MariaDB Hornos (Primary)**: localhost:3306
+- **MariaDB San Lorenzo (Replica)**: localhost:3307
+- **MariaDB Tucumán (Arbitrator)**: localhost:3308
+- **MaxScale Hornos (Routing)**: localhost:4006
+- **MaxScale San Lorenzo (Routing)**: localhost:4007
 
 ## Pruebas de Failover
 
@@ -232,7 +235,8 @@ docker exec maxscale-hornos maxctrl call command mariadbmon failover MariaDB-Mon
 ## Archivos de Configuración
 
 - `docker-compose.yml`: Definición completa del cluster
-- `maxscale/maxscale_3regiones.cnf`: Configuración MaxScale
+- `maxscale/maxscale_hornos.cnf`: Configuración MaxScale Hornos
+- `maxscale/maxscale_sanlorenzo.cnf`: Configuración MaxScale San Lorenzo
 - `mariadb/primary/init.sql`: Inicialización primary
 - `mariadb/replica/init.sql`: Inicialización replica
 - `mariadb/arbitrator/init.sql`: Inicialización arbitrator
@@ -245,6 +249,26 @@ docker exec maxscale-hornos maxctrl call command mariadbmon failover MariaDB-Mon
 1. **MaxScale Probado**: Solución madura para HA
 2. **Failover Automático**: Sin intervención manual
 3. **Arbitrator Dedicado**: Prevención de split-brain
-4. **Airflow HA Real**: Scheduler activo/standby
-5. **Simulación Realista**: 3 regiones geográficas
-6. **Monitoreo Completo**: Estado en tiempo real
+4. **Conectividad Multi-Red**: MaxScale ve todos los servidores
+5. **Control de Tráfico**: VRouter preparado para iptables
+6. **Replicación Sólida**: Master-Slave funcionando correctamente
+7. **Monitoreo Completo**: Estado en tiempo real
+
+## Estado Actual ✅
+
+```
+=== MAXSCALE SERVERS ===
+--- MaxScale Hornos ---
+│ mariadb-hornos     │ 172.20.0.20 │ Master, Running │
+│ mariadb-sanlorenzo │ 172.21.0.20 │ Slave, Running  │
+│ mariadb-tucuman    │ 172.22.0.20 │ Slave, Running  │
+
+--- MaxScale San Lorenzo ---
+│ mariadb-hornos     │ 172.20.0.20 │ Master, Running │
+│ mariadb-sanlorenzo │ 172.21.0.20 │ Slave, Running  │
+│ mariadb-tucuman    │ 172.22.0.20 │ Slave, Running  │
+```
+
+**Conectividad establecida**: Cada MaxScale conectado a todas las redes vía VRouter
+**Replicación funcionando**: Todos los servidores sincronizados con GTID
+**Listo para**: Configuración de iptables en VRouter para control de tráfico

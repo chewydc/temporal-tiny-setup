@@ -1,0 +1,19 @@
+FROM apache/airflow:3.1.8-python3.11
+
+USER root
+
+# Instalar dependencias del sistema para MySQL
+RUN apt-get update && apt-get install -y \
+    default-libmysqlclient-dev \
+    pkg-config \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Instalar dependencias Python para MySQL
+RUN pip install --no-cache-dir \
+    mysqlclient \
+    mysql-connector-python
+
+USER airflow

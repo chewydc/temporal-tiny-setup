@@ -3,49 +3,70 @@ threads=auto
 admin_host=0.0.0.0
 admin_port=8989
 admin_secure_gui=false
+log_info=true
+log_debug=true
+log_warning=true
+log_notice=true
 
-# Monitor - San Lorenzo region perspective
+syslog=0
+# =========================
+# MONITOR - SAN LORENZO
+# =========================
 [MariaDB-Monitor]
 type=monitor
 module=mariadbmon
-servers=mariadb-primary,mariadb-replica,mariadb-arbitrator
-servers_no_promotion=mariadb-arbitrator
+
+servers=mariadb-hornos,mariadb-sanlorenzo,mariadb-tucuman
+servers_no_promotion=mariadb-tucuman
+
 user=maxscale_monitor
-password=maxscale_monitor_pass
+password=monitor_pass
+
 monitor_interval=2000ms
 auto_failover=true
 auto_rejoin=true
 failcount=3
-master_conditions=primary_monitor_master
-cooperative_monitoring_locks=majority_of_all
 
-# Service - Solo primary y replica para routing (arbitrator excluido)
+# CLAVE: Tucumán nunca se promueve a master
+enforce_simple_topology=true
+
+# =========================
+# SERVICE - SAN LORENZO
+# =========================
 [ReadWriteSplit-Service]
 type=service
 router=readwritesplit
-servers=mariadb-primary,mariadb-replica
-user=maxscale_router
-password=maxscale_router_pass
+servers=mariadb-hornos,mariadb-sanlorenzo
 
-# Listener
+user=maxscale_router
+password=router_pass
+
+# =========================
+# LISTENER - SAN LORENZO
+# =========================
 [ReadWriteSplit-Listener]
 type=listener
 service=ReadWriteSplit-Service
 protocol=MariaDBClient
 port=4006
 
-# Servers - San Lorenzo region uses local replica, remote primary/arbitrator via vrouter
-[mariadb-primary]
+# =========================
+# SERVERS - SAN LORENZO PERSPECTIVE
+# =========================
+[mariadb-hornos]
 type=server
 address=172.20.0.20
 port=3306
+priority=100
 
-[mariadb-replica]
+[mariadb-sanlorenzo]
 type=server
-address=mariadb-replica
+address=172.21.0.20
 port=3306
+priority=50
 
-[mariadb-arbitrator]
+[mariadb-tucuman]
 type=server
 address=172.22.0.20
 port=3306
+priority=0
