@@ -1,0 +1,51 @@
+[maxscale]
+threads=auto
+admin_host=0.0.0.0
+admin_port=8989
+admin_secure_gui=false
+
+# Monitor - Basado en configuración de producción
+[MariaDB-Monitor]
+type=monitor
+module=mariadbmon
+servers=mariadb-primary,mariadb-replica,mariadb-arbitrator
+servers_no_promotion=mariadb-arbitrator
+user=maxscale_monitor
+password=maxscale_monitor_pass
+monitor_interval=2000ms
+auto_failover=true
+auto_rejoin=true
+failcount=3
+master_conditions=primary_monitor_master
+cooperative_monitoring_locks=majority_of_all
+
+# Service - Solo primary y replica para routing (arbitrator excluido)
+[ReadWriteSplit-Service]
+type=service
+router=readwritesplit
+servers=mariadb-primary,mariadb-replica
+user=maxscale_router
+password=maxscale_router_pass
+
+# Listener
+[ReadWriteSplit-Listener]
+type=listener
+service=ReadWriteSplit-Service
+protocol=MariaDBClient
+port=4006
+
+# Servers
+[mariadb-primary]
+type=server
+address=mariadb-primary
+port=3306
+
+[mariadb-replica]
+type=server
+address=mariadb-replica
+port=3306
+
+[mariadb-arbitrator]
+type=server
+address=mariadb-arbitrator
+port=3306
