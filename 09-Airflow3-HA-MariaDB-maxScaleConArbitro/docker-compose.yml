@@ -225,6 +225,10 @@ services:
     networks:
       net-hornos:
         ipv4_address: 172.20.0.25
+      net-sanlorenzo:
+        ipv4_address: 172.21.0.2
+      net-tucuman:
+        ipv4_address: 172.22.0.2
 
   # ========================================================================
   # MAXSCALE - SAN LORENZO (conectado a todas las redes vía VRouter)
@@ -272,6 +276,10 @@ services:
     networks:
       net-sanlorenzo:
         ipv4_address: 172.21.0.25
+      net-hornos:
+        ipv4_address: 172.20.0.7
+      net-tucuman:
+        ipv4_address: 172.22.0.3
 
   # ========================================================================
   # REDIS - HORNOS
