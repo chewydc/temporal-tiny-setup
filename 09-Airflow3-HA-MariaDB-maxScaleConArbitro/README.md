@@ -86,6 +86,24 @@ network-control.bat status
 - **MaxScale Hornos (Routing)**: localhost:4006
 - **MaxScale San Lorenzo (Routing)**: localhost:4007
 
+## APIs REST de MaxScale ✅
+
+**MaxScale Hornos API:**
+```bash
+curl http://localhost:8989/v1/servers
+curl http://localhost:8989/v1/services
+curl http://localhost:8989/v1/monitors
+```
+
+**MaxScale San Lorenzo API:**
+```bash
+curl http://localhost:8990/v1/servers
+curl http://localhost:8990/v1/services
+curl http://localhost:8990/v1/monitors
+```
+
+**Configuración:** `admin_auth=false` habilitado para acceso sin autenticación
+
 ## Pruebas de Failover
 
 ### 1. Fallo de Hornos (Primary)

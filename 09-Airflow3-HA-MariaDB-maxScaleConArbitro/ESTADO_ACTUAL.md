@@ -100,8 +100,16 @@ HORNOS (172.20.0.0/24)     SAN LORENZO (172.21.0.0/24)     TUCUMAN (172.22.0.0/2
 
 3. **Monitoreo:**
    - Usar MaxScale Admin UI
+   - Usar APIs REST: `curl http://localhost:8989/v1/servers`
    - Monitorear logs de replicación
    - Verificar sincronización GTID
+
+### APIs REST Funcionando ✅
+
+**MaxScale Hornos:** http://localhost:8989/v1/servers
+**MaxScale San Lorenzo:** http://localhost:8990/v1/servers
+
+**Configuración:** `admin_auth=false` habilitado para acceso externo sin autenticación
 
 ### Comandos de Verificación
 
