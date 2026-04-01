@@ -6,6 +6,7 @@
 -- ============================================================================
 
 -- Configurar replicación desde el primary (solo para sincronizar usuarios)
+SET GLOBAL gtid_slave_pos = '';
 CHANGE MASTER TO
     MASTER_HOST='172.20.0.20',
     MASTER_PORT=3306,
@@ -19,8 +20,9 @@ START SLAVE;
 -- Configurar como read-only permanente
 SET GLOBAL read_only = ON;
 
--- Esperar sincronización inicial
+-- Verificar estado
 SELECT SLEEP(15);
+SHOW SLAVE STATUS\G
 
 -- Log de inicialización
 SELECT 'ARBITRATOR TUCUMAN INITIALIZED - READ ONLY' as status;

@@ -5,6 +5,7 @@
 -- ============================================================================
 
 -- Configurar replicación desde el primary
+SET GLOBAL gtid_slave_pos = '';
 CHANGE MASTER TO
     MASTER_HOST='172.20.0.20',
     MASTER_PORT=3306,
@@ -15,8 +16,9 @@ CHANGE MASTER TO
 
 START SLAVE;
 
--- Esperar sincronización inicial
+-- Verificar estado de replicación
 SELECT SLEEP(10);
+SHOW SLAVE STATUS\G
 
 -- Log de inicialización
 SELECT 'REPLICA SAN LORENZO INITIALIZED' as status;

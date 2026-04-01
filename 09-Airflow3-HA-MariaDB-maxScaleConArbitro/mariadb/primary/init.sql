@@ -14,6 +14,7 @@ GRANT REPLICATION SLAVE ON *.* TO 'repl_user'@'%';
 CREATE USER IF NOT EXISTS 'maxscale_monitor'@'%' IDENTIFIED BY 'monitor_pass';
 GRANT REPLICATION CLIENT, REPLICATION SLAVE, SUPER, RELOAD, PROCESS, SHOW DATABASES, EVENT ON *.* TO 'maxscale_monitor'@'%';
 GRANT SELECT ON mysql.* TO 'maxscale_monitor'@'%';
+GRANT EXECUTE ON mysql.* TO 'maxscale_monitor'@'%';
 
 -- Usuario MaxScale router (usado por MaxScale para routing de queries)
 CREATE USER IF NOT EXISTS 'maxscale_router'@'%' IDENTIFIED BY 'router_pass';
@@ -24,6 +25,7 @@ GRANT SELECT ON mysql.columns_priv TO 'maxscale_router'@'%';
 GRANT SELECT ON mysql.proxies_priv TO 'maxscale_router'@'%';
 GRANT SELECT ON mysql.roles_mapping TO 'maxscale_router'@'%';
 GRANT SHOW DATABASES ON *.* TO 'maxscale_router'@'%';
+GRANT EXECUTE ON mysql.* TO 'maxscale_router'@'%';
 
 -- Usuario Airflow (usado por Airflow a través de MaxScale)
 CREATE USER IF NOT EXISTS 'airflow'@'%' IDENTIFIED BY 'airflow_pass';

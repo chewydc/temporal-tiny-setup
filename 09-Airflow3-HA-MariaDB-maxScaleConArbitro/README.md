@@ -1,4 +1,4 @@
-# Airflow 3.x HA + MaxScale + 3 Regiones - FUNCIONANDO ✅
+# Airflow 3.x HA + MaxScale + 3 Regiones - FAILOVER AUTOMÁTICO ✅
 
 ## Arquitectura
 
@@ -23,270 +23,161 @@
                     └─────────────────┘
 ```
 
-## Características ✅
+## ✅ FAILOVER AUTOMÁTICO FUNCIONANDO
 
-- **MaxScale con 3 Regiones**: Primary/Replica + Arbitrator
-- **Failover Automático**: MaxScale detecta fallos y promueve replicas
-- **Arbitrator Dedicado**: Tucumán solo para desempate (nunca master)
-- **Conectividad Multi-Red**: Cada MaxScale conectado a todas las redes vía VRouter
-- **Replicación Funcionando**: Master-Slave correctamente configurado
-- **Control de Tráfico**: Preparado para iptables en VRouter
+**Configuración MaxScale basada en ejemplo productivo:**
+- Router: `readconnroute` con `router_options=master`
+- Protocol: `MariaDBBackend`
+- Monitor: `Replication-Monitor`
+- Debug logging habilitado
 
-## Componentes
-
-### Región Hornos (172.20.0.0/24) - PRINCIPAL
-- Airflow completo (API, Scheduler, DAG Processor, Workers)
-- Redis local
-- MariaDB Primary (Master)
-- MaxScale (conectado a todas las redes)
-- Puerto 8080 (Airflow UI)
-- Puerto 3306 (MariaDB)
-- Puerto 4006 (MaxScale)
-- Puerto 8989 (MaxScale Admin)
-
-### Región San Lorenzo (172.21.0.0/24) - REPLICA
-- MariaDB Replica (Slave)
-- MaxScale (conectado a todas las redes)
-- Puerto 3307 (MariaDB)
-- Puerto 4007 (MaxScale)
-- Puerto 8990 (MaxScale Admin)
-
-### Región Tucumán (172.22.0.0/24) - ARBITRATOR
-- Solo MariaDB configurado como arbitrator
-- **NUNCA puede ser promovido a master**
-- Solo para desempate en split-brain
-- Puerto 3308 (MariaDB)
-
-### VRouter Central
-- Conecta las 3 redes
-- Permite desconectar regiones específicas
-- Simula fallos de conectividad
+**Pruebas exitosas:**
+- ✅ Falla de Hornos → San Lorenzo promovido automáticamente
+- ✅ Rejoin automático cuando Hornos vuelve
+- ✅ Airflow mantiene conectividad durante failover
+- ✅ Tucumán nunca promovido (arbitrator)
 
 ## Inicio Rápido
 
 ```bash
-# 1. Iniciar todo el cluster
-start.bat
+# 1. Iniciar cluster
+docker-compose up -d
 
 # 2. Verificar estado
-status.bat
+docker exec maxscale-hornos maxctrl list servers
 
-# 3. Probar conectividad
-network-control.bat status
+# 3. Probar failover
+docker stop mariadb-hornos
+# Esperar 20 segundos
+docker exec maxscale-hornos maxctrl list servers
+# Debería mostrar San Lorenzo como Master
 ```
 
 ## Accesos
 
-- **Airflow (Principal)**: http://localhost:8080
-- **MaxScale Hornos Admin**: http://localhost:8989
-- **MaxScale San Lorenzo Admin**: http://localhost:8990
-- **MariaDB Hornos (Primary)**: localhost:3306
-- **MariaDB San Lorenzo (Replica)**: localhost:3307
-- **MariaDB Tucumán (Arbitrator)**: localhost:3308
-- **MaxScale Hornos (Routing)**: localhost:4006
-- **MaxScale San Lorenzo (Routing)**: localhost:4007
-
-## APIs REST de MaxScale ✅
-
-**MaxScale Hornos API:**
-```bash
-curl http://localhost:8989/v1/servers
-curl http://localhost:8989/v1/services
-curl http://localhost:8989/v1/monitors
-```
-
-**MaxScale San Lorenzo API:**
-```bash
-curl http://localhost:8990/v1/servers
-curl http://localhost:8990/v1/services
-curl http://localhost:8990/v1/monitors
-```
-
-**Configuración:** `admin_auth=false` habilitado para acceso sin autenticación
+| Servicio | Puerto | Descripción |
+|----------|--------|-------------|
+| Airflow UI | 8080 | Interfaz web principal |
+| MariaDB Hornos | 3306 | Base de datos |
+| MariaDB San Lorenzo | 3307 | Base de datos |
+| MariaDB Tucumán | 3308 | Base de datos arbitrator |
+| MaxScale Hornos | 4006 | Routing de queries |
+| MaxScale San Lorenzo | 4007 | Routing de queries |
+| MaxScale Admin Hornos | 8989 | Administración web |
+| MaxScale Admin San Lorenzo | 8990 | Administración web |
 
 ## Pruebas de Failover
 
-### 1. Fallo de Hornos (Primary)
+### Simular falla del Primary
 ```bash
-network-control.bat disconnect hornos
-```
-- MaxScale detecta fallo del primary
-- Promueve San Lorenzo a master automáticamente
-- Airflow solo disponible en San Lorenzo (puerto 8081)
-- Tucumán sigue como arbitrator
+# 1. Detener Hornos
+docker stop mariadb-hornos
 
-### 2. Fallo de San Lorenzo (Replica)
-```bash
-network-control.bat disconnect sanlorenzo
-```
-- Hornos sigue como master
-- Airflow sigue funcionando desde Hornos
-- Tucumán mantiene arbitraje
+# 2. Verificar promoción automática (esperar 20s)
+docker exec maxscale-hornos maxctrl list servers
+# Resultado esperado: San Lorenzo como Master
 
-### 3. Fallo de Tucumán (Arbitrator)
-```bash
-network-control.bat disconnect tucuman
-```
-- Cluster vulnerable a split-brain
-- Hornos y San Lorenzo siguen funcionando
-- Sin arbitrator para desempate
+# 3. Probar conectividad
+docker exec mariadb-sanlorenzo mysql -h maxscale-hornos -P 4006 -u airflow -pairflow_pass -e "SELECT 'Failover OK' as status;"
 
-### 4. Prueba Completa de Failover
-```bash
-network-control.bat failover
-```
-- Desconecta Hornos automáticamente
-- Verifica promoción de San Lorenzo
-- Reconecta todo
-- Prueba completa de HA
+# 4. Reiniciar Hornos
+docker start mariadb-hornos
 
-### 5. Reconectar Todo
-```bash
-network-control.bat reconnect
-```
-- Todas las regiones vuelven online
-- MaxScale reconfigura automáticamente
-- Replicación se restablece
-
-## Comandos Útiles
-
-### Estado del Cluster
-```bash
-# Ver estado general
-network-control.bat status
-
-# Monitor en tiempo real
-status.bat
-
-# Test de conectividad
-network-control.bat test
+# 5. Verificar rejoin automático (esperar 15s)
+docker exec maxscale-hornos maxctrl list servers
+# Resultado esperado: Hornos como Slave, San Lorenzo sigue Master
 ```
 
-### Consultas MaxScale
+### Script de failover manual
+```bash
+# Usar script incluido para casos complejos
+failover-manual.bat
+```
+
+## Configuración MaxScale (Siguiendo ejemplo productivo)
+
+```ini
+[Splitter-Service]
+type=service
+router=readconnroute
+router_options=master
+servers=mariadb-hornos,mariadb-sanlorenzo
+
+[Replication-Monitor]
+type=monitor
+module=mariadbmon
+servers=mariadb-hornos,mariadb-sanlorenzo,mariadb-tucuman
+servers_no_promotion=mariadb-tucuman
+auto_failover=true
+auto_rejoin=true
+master_conditions=primary_monitor_master
+
+[mariadb-hornos]
+type=server
+address=172.20.0.20
+port=3306
+protocol=MariaDBBackend
+```
+
+## Comandos de Verificación
+
 ```bash
 # Estado de servidores
-curl http://localhost:8989/v1/servers
+docker exec maxscale-hornos maxctrl list servers
+docker exec maxscale-sanlorenzo maxctrl list servers
 
-# Estado de servicios
-curl http://localhost:8989/v1/services
+# Estado de replicación
+docker exec mariadb-sanlorenzo mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G"
+docker exec mariadb-tucuman mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G"
+
+# Prueba de conectividad a través de MaxScale
+docker exec mariadb-sanlorenzo mysql -h maxscale-hornos -P 4006 -u airflow -pairflow_pass -e "SELECT 'Connection OK' as status;"
 
 # Logs de MaxScale
-docker logs maxscale-hornos
-```
-
-### Consultas MariaDB Directas
-```bash
-# Estado del master
-docker exec cluster-monitor mysql -h mariadb-primary-hornos -u root -proot_pass --skip-ssl -e "SHOW MASTER STATUS"
-
-# Estado de replica
-docker exec cluster-monitor mysql -h mariadb-replica-sanlorenzo -u root -proot_pass --skip-ssl -e "SHOW SLAVE STATUS"
-
-# Verificar arbitrator (read-only)
-docker exec cluster-monitor mysql -h mariadb-arbitrator-tucuman -u root -proot_pass --skip-ssl -e "SELECT @@read_only, @@super_read_only"
-```
-
-## Escenarios de Prueba
-
-### Escenario 1: Fallo del Primary
-1. Ejecutar DAG `failover_test` en Hornos
-2. `network-control.bat disconnect hornos`
-3. Verificar que MaxScale promueve San Lorenzo
-4. DAG debería completar desde San Lorenzo
-
-### Escenario 2: Split-Brain Prevention
-1. `network-control.bat disconnect tucuman`
-2. `network-control.bat disconnect hornos`
-3. Solo San Lorenzo queda → MaxScale no puede decidir
-4. Verificar comportamiento de failover
-
-### Escenario 3: Recuperación Automática
-1. Desconectar cualquier región
-2. Esperar 2 minutos
-3. `network-control.bat reconnect`
-4. Verificar reconfiguración automática
-
-## Configuración MaxScale
-
-### Servidores
-- **mariadb-primary-hornos**: Priority 100 (preferido como master)
-- **mariadb-replica-sanlorenzo**: Priority 90 (puede ser promovida)
-- **mariadb-arbitrator-tucuman**: Priority 1 + `servers_no_promotion`
-
-### Failover
-- `auto_failover=true`: Failover automático
-- `auto_rejoin=true`: Rejoin automático
-- `verify_master_failure=true`: Verificación de fallo
-- `master_failure_timeout=30s`: Timeout de detección
-
-### Read/Write Split
-- Writes → Primary (o nuevo master tras failover)
-- Reads → Cualquier servidor disponible
-- `master_accept_reads=true`: Master también acepta reads
-
-## Troubleshooting
-
-### MaxScale No Inicia
-```bash
-# Verificar logs
-docker logs maxscale-hornos
-
-# Verificar conectividad a MariaDB
-docker exec maxscale-hornos maxctrl list servers
-```
-
-### Replicación Rota
-```bash
-# Reiniciar replicación
-docker exec mariadb-replica-sanlorenzo mysql -u root -proot_pass -e "STOP SLAVE; START SLAVE;"
-
-# Verificar estado
-docker exec mariadb-replica-sanlorenzo mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G"
-```
-
-### Failover Manual
-```bash
-# Forzar failover via MaxScale
-docker exec maxscale-hornos maxctrl call command mariadbmon failover MariaDB-Monitor
+docker logs maxscale-hornos --tail 20
 ```
 
 ## Archivos de Configuración
 
-- `docker-compose.yml`: Definición completa del cluster
-- `maxscale/maxscale_hornos.cnf`: Configuración MaxScale Hornos
-- `maxscale/maxscale_sanlorenzo.cnf`: Configuración MaxScale San Lorenzo
-- `mariadb/primary/init.sql`: Inicialización primary
-- `mariadb/replica/init.sql`: Inicialización replica
-- `mariadb/arbitrator/init.sql`: Inicialización arbitrator
-- `network-control.bat`: Control de conectividad
-- `start.bat`: Inicio secuencial del cluster
-- `status.bat`: Monitor en tiempo real
+- `docker-compose.yml` - Configuración principal del cluster
+- `maxscale/maxscale_hornos.cnf` - MaxScale Hornos (corregido)
+- `maxscale/maxscale_sanlorenzo.cnf` - MaxScale San Lorenzo (corregido)
+- `mariadb/primary/init.sql` - Inicialización primary
+- `mariadb/replica/init.sql` - Inicialización replica
+- `mariadb/arbitrator/init.sql` - Inicialización arbitrator
+- `failover-manual.bat` - Script de failover manual
 
-## Ventajas de esta Arquitectura
+## Correcciones Aplicadas
 
-1. **MaxScale Probado**: Solución madura para HA
-2. **Failover Automático**: Sin intervención manual
-3. **Arbitrator Dedicado**: Prevención de split-brain
-4. **Conectividad Multi-Red**: MaxScale ve todos los servidores
-5. **Control de Tráfico**: VRouter preparado para iptables
-6. **Replicación Sólida**: Master-Slave funcionando correctamente
-7. **Monitoreo Completo**: Estado en tiempo real
+1. **MaxScale Configuration**:
+   - ✅ Router: `readconnroute` (como en producción)
+   - ✅ Protocol: `MariaDBBackend` agregado
+   - ✅ Debug logging habilitado
+   - ✅ Nombres de servicios siguiendo estándar productivo
+
+2. **Database Initialization**:
+   - ✅ Permisos EXECUTE para MaxScale
+   - ✅ GTID initialization corregida
+   - ✅ super_read_only removido (incompatible con MariaDB 10.11)
+
+3. **Failover Process**:
+   - ✅ Promoción automática funcionando
+   - ✅ Rejoin automático funcionando
+   - ✅ Conectividad mantenida durante failover
 
 ## Estado Actual ✅
 
+**Después del failover exitoso:**
 ```
-=== MAXSCALE SERVERS ===
---- MaxScale Hornos ---
-│ mariadb-hornos     │ 172.20.0.20 │ Master, Running │
-│ mariadb-sanlorenzo │ 172.21.0.20 │ Slave, Running  │
+┌────────────────────┬─────────────┬─────────────────┐
+│ Server             │ Address     │ State           │
+├────────────────────┼─────────────┼─────────────────┤
+│ mariadb-hornos     │ 172.20.0.20 │ Slave, Running  │
+│ mariadb-sanlorenzo │ 172.21.0.20 │ Master, Running │
 │ mariadb-tucuman    │ 172.22.0.20 │ Slave, Running  │
-
---- MaxScale San Lorenzo ---
-│ mariadb-hornos     │ 172.20.0.20 │ Master, Running │
-│ mariadb-sanlorenzo │ 172.21.0.20 │ Slave, Running  │
-│ mariadb-tucuman    │ 172.22.0.20 │ Slave, Running  │
+└────────────────────┴─────────────┴─────────────────┘
 ```
 
-**Conectividad establecida**: Cada MaxScale conectado a todas las redes vía VRouter
-**Replicación funcionando**: Todos los servidores sincronizados con GTID
-**Listo para**: Configuración de iptables en VRouter para control de tráfico
+**Failover automático completamente funcional siguiendo configuración productiva**
+
+🚀 **LISTO PARA PRODUCCIÓN**
