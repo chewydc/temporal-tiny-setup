@@ -33,7 +33,7 @@ port=3306
 protocol=MariaDBBackend
 
 # =========================
-# MONITOR - SAN LORENZO
+# MONITOR - SAN LORENZO (ACTIVE MONITOR)
 # =========================
 [Replication-Monitor]
 type=monitor
@@ -47,6 +47,7 @@ auto_failover=true
 auto_rejoin=true
 master_conditions=primary_monitor_master
 cooperative_monitoring_locks=majority_of_all
+assume_unique_hostnames=true
 
 # =========================
 # SERVICE - SAN LORENZO

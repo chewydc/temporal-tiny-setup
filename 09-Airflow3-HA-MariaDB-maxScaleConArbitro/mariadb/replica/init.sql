@@ -1,7 +1,7 @@
 -- ============================================================================
 -- MARIADB REPLICA - SAN LORENZO
 -- ============================================================================
--- Configuración de replicación desde primary (nombres simples como caso 08)
+-- Configuración de replicación desde primary (preparada para failover)
 -- ============================================================================
 
 -- Configurar replicación desde el primary
@@ -16,9 +16,12 @@ CHANGE MASTER TO
 
 START SLAVE;
 
+-- IMPORTANTE: NO configurar read_only=ON para permitir failover automático
+-- MaxScale necesita poder promover este servidor a master
+
 -- Verificar estado de replicación
 SELECT SLEEP(10);
 SHOW SLAVE STATUS\G
 
 -- Log de inicialización
-SELECT 'REPLICA SAN LORENZO INITIALIZED' as status;
+SELECT 'REPLICA SAN LORENZO INITIALIZED - READY FOR FAILOVER' as status;
