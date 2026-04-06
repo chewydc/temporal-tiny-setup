@@ -62,7 +62,7 @@ Tiny-Setup/
 - **Qué hace**: Despliega Airflow 3.x con API Server, Scheduler y 2 Workers usando CeleryExecutor. MariaDB Primary/Replica con replicación GTID y MaxScale como proxy con read/write split y failover automático.
 - **Características**: HA con failover automático, read/write split, workers escalables, sin autenticación (SimpleAuthManager)
 
-### [Caso 09: Airflow 3 HA con Galera Cluster (3 Regiones)](09-Airflow3-HA-MariaDB-maxScaleConArbitro/)
+### [Caso 09: Airflow 3 HA con Galera Cluster (3 Regiones)](09-Airflow3-HA-MariaDB-maxScale/)
 - **Tecnologías**: Airflow 3.x, MariaDB Galera Cluster, Redis, Celery
 - **Objetivo**: PoC de Airflow 3 en alta disponibilidad con Galera Cluster puro distribuido en 3 regiones geográficas
 - **Qué hace**: Despliega Airflow 3.x HA en 2 regiones (Hornos/SanLorenzo) con Galera Cluster de 3 nodos (2 datos + 1 arbitrator en Tucumán). Simula fallos de conectividad entre regiones para probar failover automático sin MaxScale.

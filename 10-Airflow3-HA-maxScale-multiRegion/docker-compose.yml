@@ -124,8 +124,8 @@ services:
         ip route add 172.20.0.0/24 via 172.21.0.10 2>/dev/null || true
         ip route add 172.22.0.0/24 via 172.21.0.10 2>/dev/null || true
         
-        # Iniciar MariaDB
-        exec docker-entrypoint.sh --server-id=2 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON
+        # Iniciar MariaDB (SIN read-only para permitir failover)
+        exec docker-entrypoint.sh --server-id=2 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON
     depends_on:
       mariadb-hornos:
         condition: service_healthy
