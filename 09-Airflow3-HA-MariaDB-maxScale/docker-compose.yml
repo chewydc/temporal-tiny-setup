@@ -173,7 +173,7 @@ services:
       - ./maxscale/maxscale_sanlorenzo.cnf:/etc/maxscale.cnf:ro
     ports:
       - "4007:4006"  # Read-Write Service
-      - "8990:8989"  # MaxScale Admin
+      - "8990:8990"  # MaxScale Admin
     depends_on:
       mariadb-hornos:
         condition: service_healthy
