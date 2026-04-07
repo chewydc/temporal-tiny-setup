@@ -40,5 +40,3 @@ echo.
 echo El cluster ha sido completamente eliminado.
 echo Para reiniciar, ejecuta: start.bat
 echo.
-
-pause

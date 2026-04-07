@@ -7,15 +7,13 @@ echo Deteniendo y eliminando contenedores...
 docker-compose down -v
 
 echo.
-echo Eliminando imágenes no utilizadas...
+echo Eliminando imagenes no utilizadas...
 docker image prune -f
 
 echo.
-echo Eliminando volúmenes huérfanos...
+echo Eliminando volumenes huerfanos...
 docker volume prune -f
 
 echo.
 echo Limpieza completada.
 echo ============================================================================
-
-pause

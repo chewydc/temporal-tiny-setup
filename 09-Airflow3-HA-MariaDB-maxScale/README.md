@@ -1,113 +1,82 @@
-# Airflow 3 HA con MariaDB + MaxScale (Red Única Simplificada)
+# MaxScale HA con Failover Automático
 
-## Arquitectura Simplificada
+## Arquitectura Simple
 
+- **2 MaxScale nodes**: Ambos con failover automático habilitado
+- **3 MariaDB nodes**: HORNOS (master), SANLORENZO (replica), TUCUMAN (arbitrator)
+- **Cooperative locking**: Evita split-brain entre MaxScale nodes
+
+## Configuración Clave
+
+### MaxScale
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   MaxScale      │    │    MaxScale      │    │                 │
-│   Hornos        │    │   San Lorenzo    │    │    Airflow 3    │
-│   :4006         │    │    :4007         │    │     :8080       │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-    ┌────────────────────────────┼────────────────────────────┐
-    │                            │                            │
-┌───▼────┐              ┌───────▼──┐              ┌──────────▼┐
-│MariaDB │              │ MariaDB  │              │ MariaDB   │
-│Hornos  │◄─────────────┤San Lorenzo│◄─────────────┤ Tucuman   │
-│:3306   │  Replicación │  :3307   │  Replicación │  :3308    │
-│PRIMARY │              │ REPLICA  │              │ARBITRATOR │
-└────────┘              └──────────┘              └───────────┘
+auto_failover=true
+auto_rejoin=true
+cooperative_monitoring_locks=majority_of_running
+master_conditions=running_slave
 ```
 
-## Características
+### MariaDB Slaves (CRÍTICO)
+```
+# Docker-compose
+--read-only=ON
 
-- **Red única**: Sin complejidad de múltiples redes
-- **3 MariaDB**: Hornos (Primary), San Lorenzo (Replica), Tucuman (Arbitrator)
-- **2 MaxScale**: Failover automático con monitoreo cooperativo
-- **Airflow 3**: Con Celery Executor y Redis
-- **Configuración como producción**: Usuarios y parámetros idénticos
+# Scripts de inicialización
+SET GLOBAL read_only = 1;
+SET GLOBAL super_read_only = 1;
+```
 
-## Inicio Rápido
+## Proceso de Failover
 
+1. **HORNOS DB falla** → MaxScale detecta la falla
+2. **SANLORENZO DB** se promueve automáticamente a master
+3. **Tráfico se redirige** al nuevo master
+4. **HORNOS DB vuelve** → Se reintegra como replica
+
+## Comandos Básicos
+
+### Iniciar
 ```bash
-# Iniciar todo el stack
-start.bat
-
-# Verificar estado
-status.bat
-
-# Limpiar todo
-clean.bat
+docker-compose up -d
 ```
 
-## Accesos
-
-- **Airflow Web UI**: http://localhost:8080 (admin/admin)
-- **MaxScale Hornos**: http://localhost:8989 (admin/mariadb)
-- **MaxScale San Lorenzo**: http://localhost:8990 (admin/mariadb)
-
-## Bases de Datos
-
-- **MariaDB Hornos**: localhost:3306 (Primary)
-- **MariaDB San Lorenzo**: localhost:3307 (Replica)
-- **MariaDB Tucuman**: localhost:3308 (Arbitrator)
-
-## MaxScale
-
-- **MaxScale Hornos**: localhost:4006
-- **MaxScale San Lorenzo**: localhost:4007
-
-## Prueba de Failover Manual
-
+### Verificar estado
 ```bash
-# 1. Verificar estado inicial
-status.bat
+# MaxScale 1
+docker exec maxscale-hornos maxctrl list servers
 
-# 2. Simular falla del primary
-docker-compose stop mariadb-hornos
-
-# 3. Verificar failover automático (esperar ~10 segundos)
-status.bat
-
-# 4. Restaurar primary
-docker-compose start mariadb-hornos
-
-# 5. Verificar rejoin automático
-status.bat
+# MaxScale 2 (puerto diferente)
+docker exec maxscale-sanlorenzo maxctrl --hosts=127.0.0.1:8990 list servers
 ```
 
-## Monitoreo
-
+### Probar failover
 ```bash
-# Estado de MaxScale
-docker-compose exec maxscale-hornos maxctrl list servers
-docker-compose exec maxscale-sanlorenzo maxctrl list servers
+# Simular falla
+docker stop mariadb-hornos
 
-# Estado de replicación
-docker-compose exec mariadb-sanlorenzo mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G"
-docker-compose exec mariadb-tucuman mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G"
+# Verificar promoción (esperar ~10 segundos)
+docker exec maxscale-hornos maxctrl list servers
 
-# Logs de MaxScale
-docker-compose logs maxscale-hornos
-docker-compose logs maxscale-sanlorenzo
+# Restaurar
+docker start mariadb-hornos
 ```
 
-## DAG de Prueba
+## Puertos
 
-El DAG `test_ha_failover` se ejecuta cada 5 minutos y:
-- Prueba la conexión a la base de datos
-- Muestra información del servidor actual
-- Crea tabla de prueba
-- Inserta datos de prueba
+- **MaxScale HORNOS**: 4006 (service), 8989 (admin)
+- **MaxScale SANLORENZO**: 4007 (service), 8990 (admin)
+- **MariaDB**: 3306, 3307, 3308
 
-Úsalo para verificar que el failover funciona correctamente durante las pruebas.
+## Conexión desde Airflow
 
-## Configuración de Producción
+Airflow se conecta a `maxscale-hornos:4006` y MaxScale maneja automáticamente el routing al master actual.
 
-La configuración MaxScale es idéntica a producción:
-- Usuarios: `monitor` y `maxscaleuser`
-- Parámetros: `master_conditions=primary_monitor_master`
-- Monitoreo cooperativo: `cooperative_monitoring_locks=majority_of_all`
-- Intervalo: `monitor_interval=2000ms`
+## Solución a Problemas Comunes
+
+### Problema: Slaves no se detectan correctamente
+**Causa**: Falta configuración `--read-only=ON` en docker-compose
+**Solución**: Ya corregido en mariadb-sanlorenzo y mariadb-tucuman
+
+### Problema: Replicación se rompe al reiniciar
+**Causa**: Scripts de init.sql no configuran read_only
+**Solución**: Ya corregido con `SET GLOBAL read_only = 1;` en scripts

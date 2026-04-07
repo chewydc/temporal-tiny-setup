@@ -1,18 +1,21 @@
 @echo off
 echo ============================================================================
-echo AIRFLOW 3 HA - MARIADB + MAXSCALE (RED ÚNICA SIMPLIFICADA)
+echo AIRFLOW 3 HA - MARIADB + MAXSCALE (RED UNICA SIMPLIFICADA)
 echo ============================================================================
 
+echo Limpiando containers anteriores...
+docker compose down -v --remove-orphans > nul 2>&1
+
 echo Iniciando servicios...
-docker-compose up -d
+docker compose up -d
 
 echo.
-echo Esperando que los servicios estén listos...
-timeout /t 30 /nobreak
+echo Esperando que los servicios esten listos...
+timeout /t 25 /nobreak
 
 echo.
 echo Estado de los servicios:
-docker-compose ps
+docker compose ps
 
 echo.
 echo ============================================================================
@@ -29,5 +32,3 @@ echo.
 echo MaxScale Hornos: localhost:4006
 echo MaxScale San Lorenzo: localhost:4007
 echo ============================================================================
-
-pause

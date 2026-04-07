@@ -4,30 +4,21 @@ echo ESTADO DEL CLUSTER HA
 echo ============================================================================
 
 echo.
-echo === CONTENEDORES ===
-docker-compose ps
-
-echo.
 echo === MAXSCALE HORNOS - ESTADO DE SERVIDORES ===
 docker-compose exec maxscale-hornos maxctrl list servers
 
 echo.
 echo === MAXSCALE SAN LORENZO - ESTADO DE SERVIDORES ===
-docker-compose exec maxscale-sanlorenzo maxctrl list servers
+docker exec maxscale-sanlorenzo maxctrl --hosts=127.0.0.1:8990 list servers
 
 echo.
-echo === REPLICACIÓN MARIADB SAN LORENZO ===
-docker-compose exec mariadb-sanlorenzo mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G" | findstr "Slave_IO_Running\|Slave_SQL_Running\|Master_Host\|Seconds_Behind_Master"
+echo === REPLICACION MARIADB HORNOS ===
+docker-compose exec mariadb-hornos mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"
 
 echo.
-echo === REPLICACIÓN MARIADB TUCUMAN ===
-docker-compose exec mariadb-tucuman mysql -u root -proot_pass -e "SHOW SLAVE STATUS\G" | findstr "Slave_IO_Running\|Slave_SQL_Running\|Master_Host\|Seconds_Behind_Master"
+echo === REPLICACION MARIADB SAN LORENZO ===
+docker-compose exec mariadb-sanlorenzo mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"
 
 echo.
-echo ============================================================================
-echo PARA PROBAR FAILOVER MANUAL:
-echo   docker-compose stop mariadb-hornos
-echo   docker-compose start mariadb-hornos
-echo ============================================================================
-
-pause
+echo === REPLICACION MARIADB TUCUMAN ===
+docker-compose exec mariadb-tucuman mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"

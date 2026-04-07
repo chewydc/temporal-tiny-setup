@@ -9,8 +9,8 @@ admin_secure_gui=false
 type=monitor
 module=mariadbmon
 servers=mariadb-primary,mariadb-replica
-user=maxscale_monitor
-password=maxscale_monitor_pass
+user=monitor
+password=monitor_pass
 monitor_interval=5s
 auto_failover=true
 auto_rejoin=true
@@ -19,10 +19,11 @@ failcount=3
 # Service
 [ReadWriteSplit-Service]
 type=service
-router=readwritesplit
+router=readconnroute
+router_options=master
 servers=mariadb-primary,mariadb-replica
-user=maxscale_router
-password=maxscale_router_pass
+user=maxscaleuser
+password=router_pass
 
 # Listener
 [ReadWriteSplit-Listener]
