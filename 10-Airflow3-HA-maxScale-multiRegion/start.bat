@@ -1,6 +1,6 @@
 @echo off
 echo ============================================================================
-echo AIRFLOW 3 HA - MARIADB + MAXSCALE (RED UNICA SIMPLIFICADA)
+echo AIRFLOW 3 HA - MARIADB + MAXSCALE + MULTI REGION
 echo ============================================================================
 
 echo Limpiando containers anteriores...

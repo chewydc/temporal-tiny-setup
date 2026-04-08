@@ -256,6 +256,55 @@ services:
       - airflow-net
 
   # ============================================================================
+  # HEALTH CHECK MICROSERVICES - One per region
+  # ============================================================================
+  healthcheck-hornos:
+    build: ./healthcheck
+    container_name: healthcheck-hornos
+    hostname: healthcheck-hornos
+    environment:
+      - REGION_NAME=hornos
+      - AIRFLOW_URL=http://airflow-apiserver-hornos:8080
+      - HEALTH_CHECK_INTERVAL=30
+      - FAILURE_THRESHOLD=3
+      - RECOVERY_THRESHOLD=2
+      - LISTEN_PORT=8000
+    ports:
+      - "8001:8000"
+    networks:
+      - airflow-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  healthcheck-sanlorenzo:
+    build: ./healthcheck
+    container_name: healthcheck-sanlorenzo
+    hostname: healthcheck-sanlorenzo
+    environment:
+      - REGION_NAME=sanlorenzo
+      - AIRFLOW_URL=http://airflow-apiserver-sanlorenzo:8080
+      - HEALTH_CHECK_INTERVAL=30
+      - FAILURE_THRESHOLD=3
+      - RECOVERY_THRESHOLD=2
+      - LISTEN_PORT=8000
+    ports:
+      - "8002:8000"
+    networks:
+      - airflow-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
   # HAPROXY - Load balancer for Airflow instances
   # ============================================================================
   haproxy-airflow:
