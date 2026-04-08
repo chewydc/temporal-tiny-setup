@@ -1,32 +1,24 @@
 @echo off
-echo ============================================================
-echo ESTADO DE SERVICIOS - Airflow 3 HA + 3 Regiones
-echo ============================================================
-
-echo === SERVICIOS CLAVE ===
-echo Verificando Airflow Web...
-curl -s -o nul -w "Airflow Web: HTTP %%{http_code}" http://localhost:8080 2>nul || echo "Airflow Web: No disponible"
-echo.
-echo Verificando MaxScale Hornos...
-curl -s -o nul -w "MaxScale Hornos: HTTP %%{http_code}" http://localhost:8989 2>nul || echo "MaxScale Hornos: No disponible"
-echo.
-echo Verificando MaxScale San Lorenzo...
-curl -s -o nul -w "MaxScale San Lorenzo: HTTP %%{http_code}" http://localhost:8990 2>nul || echo "MaxScale San Lorenzo: No disponible"
+echo ============================================================================
+echo ESTADO DEL CLUSTER HA
+echo ============================================================================
 
 echo.
-echo === MAXSCALE SERVERS ===
-echo --- MaxScale Hornos ---
-docker exec maxscale-hornos maxctrl list servers 2>nul || echo "MaxScale Hornos no disponible"
-echo.
-echo --- MaxScale San Lorenzo ---
-docker exec maxscale-sanlorenzo maxctrl list servers 2>nul || echo "MaxScale San Lorenzo no disponible"
+echo === MAXSCALE HORNOS - ESTADO DE SERVIDORES ===
+docker-compose exec maxscale-hornos maxctrl list servers
 
 echo.
-echo ============================================================
-echo ACCESOS:
-echo - Airflow Web UI: http://localhost:8080
-echo - MaxScale Hornos: http://localhost:8989 (puerto 4006)
-echo - MaxScale San Lorenzo: http://localhost:8990 (puerto 4007)
+echo === MAXSCALE SAN LORENZO - ESTADO DE SERVIDORES ===
+docker exec maxscale-sanlorenzo maxctrl --hosts=127.0.0.1:8990 list servers
+
 echo.
-echo Para logs en tiempo real: docker compose logs -f airflow-apiserver
-echo ============================================================
+echo === REPLICACION MARIADB HORNOS ===
+docker-compose exec mariadb-hornos mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"
+
+echo.
+echo === REPLICACION MARIADB SAN LORENZO ===
+docker-compose exec mariadb-sanlorenzo mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"
+
+echo.
+echo === REPLICACION MARIADB TUCUMAN ===
+docker-compose exec mariadb-tucuman mysql -u root -proot_pass -e "SELECT 'IO_Running:', IF(@@read_only=1,'Slave','Master') as Role; SHOW SLAVE STATUS\G" 2>nul | findstr /C:"Slave_IO_Running" /C:"Slave_SQL_Running" /C:"Master_Host" /C:"Seconds_Behind_Master" /C:"IO_Running"

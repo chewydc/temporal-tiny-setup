@@ -1,76 +1,72 @@
 # ============================================================================
-# AIRFLOW 3.x HA + MAXSCALE + 3 REGIONES - CONFIGURACIÓN ORIGINAL
+# AIRFLOW 3.x MULTI-SITE HA + MAXSCALE + MARIADB - CARPETA 10
 # ============================================================================
-# 3 redes: Hornos, San Lorenzo, Tucumán
-# MariaDB en cada sitio
-# MaxScale en Hornos y San Lorenzo
-# Tucumán nunca se promueve a master (solo arbitrator)
-# Airflow completo funcionando
+# Dos instancias de Airflow (Hornos y San Lorenzo) con HA
+# Cada Airflow apunta a su MaxScale local
+# HAProxy arriba balanceando entre ambos Airflow
+# MariaDB cluster compartido con replicación GTID
 # ============================================================================
 
-x-airflow-common: &airflow-common
+x-airflow-hornos: &airflow-hornos
   image: apache/airflow:3.1.8-python3.11
   environment:
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
-    AIRFLOW__CELERY__BROKER_URL: redis://redis-hornos:6379/0
     AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-hornos:4006/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://redis-hornos:6379/0
     AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "10"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    AIRFLOW__WEBSERVER__BASE_URL: "http://airflow-apiserver:8080"
     AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "temporary_secret_key_for_dev"
     AIRFLOW__API_AUTH__JWT_SECRET: "temporary_jwt_secret_for_dev"
     AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
   volumes:
     - ./dags:/opt/airflow/dags
     - ./airflow.cfg:/opt/airflow/airflow.cfg
-    - airflow-logs:/opt/airflow/logs
+    - airflow-hornos-logs:/opt/airflow/logs
   depends_on:
     mariadb-hornos:
       condition: service_healthy
     redis-hornos:
       condition: service_healthy
+    maxscale-hornos:
+      condition: service_healthy
   networks:
-    - net-hornos
+    - airflow-net
+
+x-airflow-sanlorenzo: &airflow-sanlorenzo
+  image: apache/airflow:3.1.8-python3.11
+  environment:
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-sanlorenzo:4006/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-sanlorenzo:4006/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://redis-sanlorenzo:6379/0
+    AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "10"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "temporary_secret_key_for_dev"
+    AIRFLOW__API_AUTH__JWT_SECRET: "temporary_jwt_secret_for_dev"
+    AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./airflow.cfg:/opt/airflow/airflow.cfg
+    - airflow-sanlorenzo-logs:/opt/airflow/logs
+  depends_on:
+    mariadb-sanlorenzo:
+      condition: service_healthy
+    redis-sanlorenzo:
+      condition: service_healthy
+    maxscale-sanlorenzo:
+      condition: service_healthy
+  networks:
+    - airflow-net
 
 services:
 
-  # ========================================================================
-  # VROUTER - Conectividad entre las 3 regiones
-  # ========================================================================
-  vrouter:
-    image: alpine:latest
-    container_name: vrouter
-    hostname: vrouter
-    privileged: true
-    command: >
-      sh -c '
-        apk add --no-cache iptables iproute2 &&
-        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf &&
-        sysctl -p &&
-        
-        echo "=== VROUTER READY ===" &&
-        echo "Routing configurado entre:" &&
-        echo "  Hornos: 172.20.0.0/24" &&
-        echo "  SanLorenzo: 172.21.0.0/24" &&
-        echo "  Tucuman: 172.22.0.0/24" &&
-        
-        tail -f /dev/null
-      '
-    networks:
-      net-hornos:
-        ipv4_address: 172.20.0.10
-      net-sanlorenzo:
-        ipv4_address: 172.21.0.10
-      net-tucuman:
-        ipv4_address: 172.22.0.10
-
-  # ========================================================================
-  # MARIADB - HORNOS (PRIMARY)
-  # ========================================================================
   mariadb-hornos:
     image: mariadb:10.11
     container_name: mariadb-hornos
@@ -98,34 +94,26 @@ services:
       retries: 10
       start_period: 30s
     networks:
-      net-hornos:
-        ipv4_address: 172.20.0.20
+      - airflow-net
     ports:
       - "3306:3306"
 
-  # ========================================================================
-  # MARIADB - SAN LORENZO (REPLICA)
-  # ========================================================================
   mariadb-sanlorenzo:
     image: mariadb:10.11
     container_name: mariadb-sanlorenzo
     hostname: mariadb-sanlorenzo
-    privileged: true
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - ./mariadb/replica/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mariadb-sanlorenzo-data:/var/lib/mysql
-    command:
-      - /bin/bash
-      - -c
-      - |
-        # Configurar rutas de red
-        ip route add 172.20.0.0/24 via 172.21.0.10 2>/dev/null || true
-        ip route add 172.22.0.0/24 via 172.21.0.10 2>/dev/null || true
-        
-        # Iniciar MariaDB (SIN read-only para permitir failover)
-        exec docker-entrypoint.sh --server-id=2 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON
+    command: >
+      --server-id=2
+      --log-bin=mariadb-bin
+      --binlog-format=ROW
+      --gtid-strict-mode=ON
+      --log-slave-updates=ON
+      --read-only=ON
     depends_on:
       mariadb-hornos:
         condition: service_healthy
@@ -136,34 +124,26 @@ services:
       retries: 10
       start_period: 40s
     networks:
-      net-sanlorenzo:
-        ipv4_address: 172.21.0.20
+      - airflow-net
     ports:
       - "3307:3306"
 
-  # ========================================================================
-  # MARIADB - TUCUMAN (ARBITRATOR - NUNCA MASTER)
-  # ========================================================================
   mariadb-tucuman:
     image: mariadb:10.11
     container_name: mariadb-tucuman
     hostname: mariadb-tucuman
-    privileged: true
     environment:
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - ./mariadb/arbitrator/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mariadb-tucuman-data:/var/lib/mysql
-    command:
-      - /bin/bash
-      - -c
-      - |
-        # Configurar rutas de red
-        ip route add 172.20.0.0/24 via 172.22.0.10 2>/dev/null || true
-        ip route add 172.21.0.0/24 via 172.22.0.10 2>/dev/null || true
-        
-        # Iniciar MariaDB (SOLO ARBITRATOR - NUNCA MASTER)
-        exec docker-entrypoint.sh --server-id=3 --log-bin=mariadb-bin --binlog-format=ROW --gtid-strict-mode=ON --log-slave-updates=ON --read-only=ON
+    command: >
+      --server-id=3
+      --log-bin=mariadb-bin
+      --binlog-format=ROW
+      --gtid-strict-mode=ON
+      --log-slave-updates=ON
+      --read-only=ON
     depends_on:
       mariadb-hornos:
         condition: service_healthy
@@ -174,27 +154,22 @@ services:
       retries: 10
       start_period: 50s
     networks:
-      net-tucuman:
-        ipv4_address: 172.22.0.20
+      - airflow-net
     ports:
       - "3308:3306"
 
-  # ========================================================================
-  # MAXSCALE - HORNOS (conectado a todas las redes vía VRouter)
-  # ========================================================================
   maxscale-hornos:
     image: mariadb/maxscale:24.02
     container_name: maxscale-hornos
     hostname: maxscale-hornos
     user: "0:0"
-    privileged: true
     environment:
       - MAXSCALE_DISABLE_MONIT=1
     volumes:
       - ./maxscale/maxscale_hornos.cnf:/etc/maxscale.cnf:ro
     ports:
-      - "4006:4006"
-      - "8989:8989"
+      - "4006:4006"  # Read-Write Service
+      - "8989:8989"  # MaxScale Admin
     depends_on:
       mariadb-hornos:
         condition: service_healthy
@@ -202,50 +177,34 @@ services:
         condition: service_healthy
       mariadb-tucuman:
         condition: service_healthy
-      vrouter:
-        condition: service_started
     healthcheck:
       test: ["CMD", "maxctrl", "list", "servers"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 55s
-    command:
-      - /bin/bash
-      - -c
-      - |
-        # Configurar rutas a través del VRouter para acceder a todas las redes
-        ip route add 172.21.0.0/24 via 172.20.0.10 2>/dev/null || true
-        ip route add 172.22.0.0/24 via 172.20.0.10 2>/dev/null || true
-        
-        echo "Starting MaxScale Hornos con conectividad completa..."
+    command: >
+      sh -c '
+        echo "Starting MaxScale Hornos..."
         rm -f /etc/monit/monitrc /etc/monit.d/* 2>/dev/null || true
         killall monit 2>/dev/null || true
-        exec maxscale --nodaemon --user=root --log=stdout
+        maxscale --nodaemon --user=root --log=stdout
+      '
     networks:
-      net-hornos:
-        ipv4_address: 172.20.0.25
-      net-sanlorenzo:
-        ipv4_address: 172.21.0.2
-      net-tucuman:
-        ipv4_address: 172.22.0.2
+      - airflow-net
 
-  # ========================================================================
-  # MAXSCALE - SAN LORENZO (conectado a todas las redes vía VRouter)
-  # ========================================================================
   maxscale-sanlorenzo:
     image: mariadb/maxscale:24.02
     container_name: maxscale-sanlorenzo
     hostname: maxscale-sanlorenzo
     user: "0:0"
-    privileged: true
     environment:
       - MAXSCALE_DISABLE_MONIT=1
     volumes:
       - ./maxscale/maxscale_sanlorenzo.cnf:/etc/maxscale.cnf:ro
     ports:
-      - "4007:4006"
-      - "8990:8989"
+      - "4007:4006"  # Read-Write Service
+      - "8990:8990"  # MaxScale Admin
     depends_on:
       mariadb-hornos:
         condition: service_healthy
@@ -253,37 +212,25 @@ services:
         condition: service_healthy
       mariadb-tucuman:
         condition: service_healthy
-      vrouter:
-        condition: service_started
     healthcheck:
       test: ["CMD", "maxctrl", "list", "servers"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 60s
-    command:
-      - /bin/bash
-      - -c
-      - |
-        # Configurar rutas a través del VRouter para acceder a todas las redes
-        ip route add 172.20.0.0/24 via 172.21.0.10 2>/dev/null || true
-        ip route add 172.22.0.0/24 via 172.21.0.10 2>/dev/null || true
-        
-        echo "Starting MaxScale San Lorenzo con conectividad completa..."
+    command: >
+      sh -c '
+        echo "Starting MaxScale San Lorenzo..."
         rm -f /etc/monit/monitrc /etc/monit.d/* 2>/dev/null || true
         killall monit 2>/dev/null || true
-        exec maxscale --nodaemon --user=root --log=stdout
+        maxscale --nodaemon --user=root --log=stdout
+      '
     networks:
-      net-sanlorenzo:
-        ipv4_address: 172.21.0.25
-      net-hornos:
-        ipv4_address: 172.20.0.7
-      net-tucuman:
-        ipv4_address: 172.22.0.3
+      - airflow-net
 
-  # ========================================================================
-  # REDIS - HORNOS
-  # ========================================================================
+  # ============================================================================
+  # REDIS INSTANCES - One per site
+  # ============================================================================
   redis-hornos:
     image: redis:7-alpine
     container_name: redis-hornos
@@ -294,15 +241,43 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      net-hornos:
-        ipv4_address: 172.20.0.30
+      - airflow-net
 
-  # ========================================================================
-  # AIRFLOW - INICIALIZACIÓN
-  # ========================================================================
-  airflow-init:
+  redis-sanlorenzo:
+    image: redis:7-alpine
+    container_name: redis-sanlorenzo
+    hostname: redis-sanlorenzo
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - airflow-net
+
+  # ============================================================================
+  # HAPROXY - Load balancer for Airflow instances
+  # ============================================================================
+  haproxy-airflow:
+    image: haproxy:2.9
+    container_name: haproxy-airflow
+    hostname: haproxy-airflow
+    ports:
+      - "8080:8080"   # Main entry point for Airflow UI
+    volumes:
+      - ./haproxy/haproxy-airflow.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - airflow-apiserver-hornos
+      - airflow-apiserver-sanlorenzo
+    networks:
+      - airflow-net
+
+  # ============================================================================
+  # AIRFLOW HORNOS SITE
+  # ============================================================================
+  airflow-init-hornos:
     image: apache/airflow:3.1.8-python3.11
-    container_name: airflow-init
+    container_name: airflow-init-hornos
     environment:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
@@ -313,7 +288,6 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "10"
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-      AIRFLOW__WEBSERVER__BASE_URL: "http://airflow-apiserver:8080"
       AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "temporary_secret_key_for_dev"
       AIRFLOW__API_AUTH__JWT_SECRET: "temporary_jwt_secret_for_dev"
       AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
@@ -321,7 +295,7 @@ services:
     volumes:
       - ./dags:/opt/airflow/dags
       - ./airflow.cfg:/opt/airflow/airflow.cfg
-      - airflow-logs:/opt/airflow/logs
+      - airflow-hornos-logs:/opt/airflow/logs
     depends_on:
       mariadb-hornos:
         condition: service_healthy
@@ -330,69 +304,121 @@ services:
       maxscale-hornos:
         condition: service_healthy
     networks:
-      - net-hornos
+      - airflow-net
     entrypoint: ["/usr/bin/dumb-init", "--"]
     command:
       - bash
       - -c
       - |
-        echo "=== Airflow 3.x DB Migration ==="
+        echo "=== Airflow 3.x DB Migration (Hornos) ==="
         airflow db migrate
-        echo "=== Init Complete ==="
+        echo "=== Init Complete (Hornos) ==="
     restart: "no"
 
-  # ========================================================================
-  # AIRFLOW - COMPONENTES
-  # ========================================================================
-  airflow-apiserver:
-    <<: *airflow-common
-    container_name: airflow-apiserver
-    hostname: airflow-apiserver
+  airflow-apiserver-hornos:
+    <<: *airflow-hornos
+    container_name: airflow-apiserver-hornos
+    hostname: airflow-apiserver-hornos
     command: api-server
     ports:
-      - "8080:8080"
+      - "8081:8080"  # Direct access to Hornos
     depends_on:
-      airflow-init:
+      airflow-init-hornos:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  airflow-scheduler:
-    <<: *airflow-common
-    container_name: airflow-scheduler
-    hostname: airflow-scheduler
+  airflow-scheduler-hornos:
+    <<: *airflow-hornos
+    container_name: airflow-scheduler-hornos
+    hostname: airflow-scheduler-hornos
     command: scheduler
     depends_on:
-      airflow-init:
+      airflow-init-hornos:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  airflow-dag-processor:
-    <<: *airflow-common
-    container_name: airflow-dag-processor
-    hostname: airflow-dag-processor
+  airflow-dag-processor-hornos:
+    <<: *airflow-hornos
+    container_name: airflow-dag-processor-hornos
+    hostname: airflow-dag-processor-hornos
     command: dag-processor
     depends_on:
-      airflow-init:
+      airflow-init-hornos:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  airflow-worker-1:
-    <<: *airflow-common
-    container_name: airflow-worker-1
-    hostname: airflow-worker-1
+  airflow-worker-hornos-1:
+    <<: *airflow-hornos
+    container_name: airflow-worker-hornos-1
+    hostname: airflow-worker-hornos-1
     command: celery worker
     depends_on:
-      airflow-init:
+      airflow-init-hornos:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  airflow-worker-2:
-    <<: *airflow-common
-    container_name: airflow-worker-2
-    hostname: airflow-worker-2
+  airflow-worker-hornos-2:
+    <<: *airflow-hornos
+    container_name: airflow-worker-hornos-2
+    hostname: airflow-worker-hornos-2
     command: celery worker
     depends_on:
-      airflow-init:
+      airflow-init-hornos:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ============================================================================
+  # AIRFLOW SAN LORENZO SITE
+  # ============================================================================
+  airflow-apiserver-sanlorenzo:
+    <<: *airflow-sanlorenzo
+    container_name: airflow-apiserver-sanlorenzo
+    hostname: airflow-apiserver-sanlorenzo
+    command: api-server
+    ports:
+      - "8082:8080"  # Direct access to San Lorenzo
+    depends_on:
+      airflow-init-hornos:  # Uses same DB, so depends on Hornos init
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler-sanlorenzo:
+    <<: *airflow-sanlorenzo
+    container_name: airflow-scheduler-sanlorenzo
+    hostname: airflow-scheduler-sanlorenzo
+    command: scheduler
+    depends_on:
+      airflow-init-hornos:  # Uses same DB, so depends on Hornos init
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-dag-processor-sanlorenzo:
+    <<: *airflow-sanlorenzo
+    container_name: airflow-dag-processor-sanlorenzo
+    hostname: airflow-dag-processor-sanlorenzo
+    command: dag-processor
+    depends_on:
+      airflow-init-hornos:  # Uses same DB, so depends on Hornos init
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-worker-sanlorenzo-1:
+    <<: *airflow-sanlorenzo
+    container_name: airflow-worker-sanlorenzo-1
+    hostname: airflow-worker-sanlorenzo-1
+    command: celery worker
+    depends_on:
+      airflow-init-hornos:  # Uses same DB, so depends on Hornos init
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-worker-sanlorenzo-2:
+    <<: *airflow-sanlorenzo
+    container_name: airflow-worker-sanlorenzo-2
+    hostname: airflow-worker-sanlorenzo-2
+    command: celery worker
+    depends_on:
+      airflow-init-hornos:  # Uses same DB, so depends on Hornos init
         condition: service_completed_successfully
     restart: unless-stopped
 
@@ -400,26 +426,9 @@ volumes:
   mariadb-hornos-data:
   mariadb-sanlorenzo-data:
   mariadb-tucuman-data:
-  airflow-logs:
+  airflow-hornos-logs:
+  airflow-sanlorenzo-logs:
 
 networks:
-  net-hornos:
+  airflow-net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
-          gateway: 172.20.0.1
-  
-  net-sanlorenzo:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.21.0.0/24
-          gateway: 172.21.0.1
-  
-  net-tucuman:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.22.0.0/24
-          gateway: 172.22.0.1

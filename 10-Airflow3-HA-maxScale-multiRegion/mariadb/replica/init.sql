@@ -1,17 +1,12 @@
--- ============================================================================
--- MARIADB REPLICA - SAN LORENZO
--- ============================================================================
--- Configuración de replicación desde primary (preparada para failover)
--- IMPORTANTE: NO configurar read_only para permitir promoción automática
--- ============================================================================
+-- =========================================================
+-- SAN LORENZO - INIT REPLICA LIMPIO Y CONSISTENTE
+-- =========================================================
 
--- Esperar a que el primary esté completamente listo y Airflow inicializado
-SELECT SLEEP(30);
+-- CRÍTICO: Configurar como read-only ANTES de la replicación
+SET GLOBAL read_only = 1;
 
--- Configurar replicación desde el primary usando GTID automático
--- slave_pos permite que MariaDB maneje automáticamente la posición GTID
 CHANGE MASTER TO
-    MASTER_HOST='172.20.0.20',
+    MASTER_HOST='mariadb-hornos',
     MASTER_PORT=3306,
     MASTER_USER='repl_user',
     MASTER_PASSWORD='repl_pass',
@@ -20,9 +15,5 @@ CHANGE MASTER TO
 
 START SLAVE;
 
--- Verificar estado de replicación
-SELECT SLEEP(10);
-SHOW SLAVE STATUS\G
-
--- Log de inicialización
-SELECT 'REPLICA SAN LORENZO INITIALIZED - READY FOR FAILOVER' as status;
+-- Esperar a que la replicacion sincronice los usuarios del primary
+SELECT SLEEP(5);
