@@ -5,22 +5,28 @@ from datetime import datetime, timedelta
 import socket
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 
 
 def simple_db_test(**context):
-    """Test simple de conexión a la DB."""
     try:
-        from airflow.settings import Session
-        session = Session()
-        result = session.execute("SELECT 1 as test").fetchone()
-        session.close()
-        
+        from airflow.providers.mysql.hooks.mysql import MySqlHook
+        import socket
+
+        hook = MySqlHook(mysql_conn_id="airflow_db")
+
+        result = hook.get_first("SELECT 1")
+
         hostname = socket.gethostname()
         print(f"[DB-TEST] SUCCESS from {hostname}: {result}")
-        return {"status": "success", "host": hostname, "result": str(result)}
-        
+
+        return {
+            "status": "success",
+            "host": hostname,
+            "result": str(result)
+        }
+
     except Exception as e:
         print(f"[DB-TEST] ERROR: {e}")
         return {"status": "error", "error": str(e)}

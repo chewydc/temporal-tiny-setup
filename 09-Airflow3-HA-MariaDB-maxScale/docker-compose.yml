@@ -10,9 +10,9 @@ x-airflow-common: &airflow-common
   image: apache/airflow:3.1.8-python3.11
   environment:
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@haproxy:4006/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@haproxy:4006/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-    AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-hornos:4006/airflow
     AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -197,6 +197,20 @@ services:
     networks:
       - airflow-net
 
+  haproxy:
+    image: haproxy:2.9
+    container_name: haproxy
+    hostname: haproxy
+    ports:
+      - "4005:4006"   # endpoint único para Airflow
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - maxscale-hornos
+      - maxscale-sanlorenzo
+    networks:
+      - airflow-net
+
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -213,9 +227,9 @@ services:
     container_name: airflow-init
     environment:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@maxscale-hornos:4006/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow_pass@haproxy:4006/airflow
       AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@maxscale-hornos:4006/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+mysql://airflow:airflow_pass@haproxy:4006/airflow
       AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstY="
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
