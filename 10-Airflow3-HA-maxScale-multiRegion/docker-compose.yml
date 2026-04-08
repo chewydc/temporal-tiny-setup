@@ -313,6 +313,7 @@ services:
     hostname: haproxy-airflow
     ports:
       - "8080:8080"   # Main entry point for Airflow UI
+      - "8404:8404"   # HAProxy Stats page
     volumes:
       - ./haproxy/haproxy-airflow.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
