@@ -6,7 +6,7 @@ Demostrar cómo implementar una **arquitectura multitenant con aislamiento REAL*
 
 ## 📚 Documentación Completa
 
-👉 **[Ver MULTITENANT.md](./MULTITENANT.md)** para documentación detallada sobre:
+👉 **[Ver MULTITENANT.md](MULTITENANT.md)** para documentación detallada sobre:
 - Conceptos de multitenant
 - Estrategias de escalabilidad
 - Arquitectura implementada
@@ -220,7 +220,7 @@ temporal operator namespace list
 
 ## 📚 Próximos Pasos
 
-1. **Lee la documentación completa**: [MULTITENANT.md](./MULTITENANT.md)
+1. **Lee la documentación completa**: [MULTITENANT.md](MULTITENANT.md)
 2. **Experimenta con el demo**: Modifica número de tenants y deployments
 3. **Implementa rate limiting**: Agrega límites de concurrencia por namespace
 4. **Prueba workers dedicados**: Un worker exclusivo por tenant
@@ -228,7 +228,7 @@ temporal operator namespace list
 
 ## 🔗 Referencias
 
-- [Documentación Multitenant Completa](./MULTITENANT.md)
+- [Documentación Multitenant Completa](MULTITENANT.md)
 - [Temporal Docs - Namespaces](https://docs.temporal.io/namespaces)
 - [Multi-tenancy Best Practices](https://docs.temporal.io/kb/multi-tenancy)
 

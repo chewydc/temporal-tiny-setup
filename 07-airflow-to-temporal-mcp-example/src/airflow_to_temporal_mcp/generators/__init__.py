@@ -1,1 +1,0 @@
-"""Generadores de código Temporal"""

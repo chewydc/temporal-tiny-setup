@@ -22,6 +22,7 @@ x-airflow-hornos: &airflow-hornos
     AIRFLOW__WEBSERVER__BASE_URL: "http://airflow-apiserver-hornos:8080"
     AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "temporary_secret_key_for_dev"
     AIRFLOW__API_AUTH__JWT_SECRET: "temporary_jwt_secret_for_dev"
+    AIRFLOW__API__SECRET_KEY: "temporary_secret_key_for_dev"
     AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
   volumes:
     - ./dags:/opt/airflow/dags
@@ -52,6 +53,7 @@ x-airflow-sanlorenzo: &airflow-sanlorenzo
     AIRFLOW__WEBSERVER__BASE_URL: "http://airflow-apiserver-sanlorenzo:8080"
     AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "temporary_secret_key_for_dev"
     AIRFLOW__API_AUTH__JWT_SECRET: "temporary_jwt_secret_for_dev"
+    AIRFLOW__API__SECRET_KEY: "temporary_secret_key_for_dev"
     AIRFLOW_CONFIG: "/opt/airflow/airflow.cfg"
   volumes:
     - ./dags:/opt/airflow/dags
