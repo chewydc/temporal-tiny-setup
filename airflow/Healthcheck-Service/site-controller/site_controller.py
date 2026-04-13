@@ -95,11 +95,11 @@ FORCE_SWITCHOVER = os.getenv('FORCE_SWITCHOVER', 'true').lower() == 'true'
 # Cuántos checks consecutivos con needs_failover=true antes de forzar switchover.
 # Debe ser >= FAILURE_THRESHOLD del healthcheck para no actuar antes de que
 # el healthcheck confirme el fallo.
-SWITCHOVER_THRESHOLD = int(os.getenv('SWITCHOVER_THRESHOLD', '5'))
+SWITCHOVER_THRESHOLD = int(os.getenv('SWITCHOVER_THRESHOLD', '3'))  # era 5
 
-# --- Hysteresis para promote/demote ---
-FAILOVER_THRESHOLD = int(os.getenv('FAILOVER_THRESHOLD', '3'))
-RECOVERY_THRESHOLD = int(os.getenv('RECOVERY_THRESHOLD', '2'))
+# --- Hysteresis para promote/demote (v2.0: thresholds reducidos) ---
+FAILOVER_THRESHOLD = int(os.getenv('FAILOVER_THRESHOLD', '2'))  # era 3
+RECOVERY_THRESHOLD = int(os.getenv('RECOVERY_THRESHOLD', '1'))  # era 2
 
 
 # =============================================================================
