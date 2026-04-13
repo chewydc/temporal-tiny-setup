@@ -1,34 +1,50 @@
 @echo off
-echo ============================================================================
-echo AIRFLOW 3 HA - MARIADB + MAXSCALE + MULTI REGION
-echo ============================================================================
+echo ============================================================
+echo  AIRFLOW MULTI-SITE ACTIVE/PASSIVE HA
+echo ============================================================
+echo.
+echo  Hornos     = initial ACTIVE  (DB primary + scheduler ON)
+echo  SanLorenzo = initial PASSIVE (DB replica + scheduler OFF)
+echo.
+echo  Services per region:
+echo    - Healthcheck (sensor)       port 8000
+echo    - Site Controller (actuator) port 8100
+echo ============================================================
 
-echo Limpiando containers anteriores...
-docker compose down -v --remove-orphans > nul 2>&1
+echo [1/4] Cleaning previous state...
+docker-compose down -v --remove-orphans 2>nul
 
-echo Iniciando servicios...
-docker compose up -d
+echo [2/4] Starting all services...
+docker-compose up -d --build
+
+echo [3/4] Waiting for schedulers to start (30s)...
+timeout /t 30 /nobreak >nul
+
+echo [4/4] Pausing PASSIVE region schedulers (San Lorenzo)...
+docker pause airflow-scheduler-sanlorenzo
+docker pause airflow-dag-processor-sanlorenzo
 
 echo.
-echo Esperando que los servicios esten listos...
-timeout /t 25 /nobreak
-
+echo ============================================================
+echo  READY
+echo ============================================================
 echo.
-echo Estado de los servicios:
-docker compose ps
-
+echo  Airflow UI (HAProxy):        http://localhost:8080
+echo  HAProxy Stats:               http://localhost:8404/stats
 echo.
-echo ============================================================================
-echo ACCESOS:
-echo ============================================================================
-echo Airflow Web UI: http://localhost:8080 (admin/admin)
-echo MaxScale Hornos: http://localhost:8989 (admin/mariadb)
-echo MaxScale San Lorenzo: http://localhost:8990 (admin/mariadb)
+echo  Healthcheck Hornos:          http://localhost:8001/health
+echo  Healthcheck SanLorenzo:      http://localhost:8002/health
 echo.
-echo MariaDB Hornos (Primary): localhost:3306
-echo MariaDB San Lorenzo (Replica): localhost:3307  
-echo MariaDB Tucuman (Arbitrator): localhost:3308
+echo  Site Controller Hornos:      http://localhost:8011/health
+echo  Site Controller SanLorenzo:  http://localhost:8012/health
 echo.
-echo MaxScale Hornos: localhost:4006
-echo MaxScale San Lorenzo: localhost:4007
-echo ============================================================================
+echo  Direct Hornos:               http://localhost:8081
+echo  Direct SanLorenzo:           http://localhost:8082
+echo.
+echo  To test failover (DB failure):
+echo    docker pause mariadb-hornos
+echo.
+echo  To test failover (Airflow failure):
+echo    docker stop airflow-apiserver-hornos
+echo    (site-controller will force DB switchover after ~50s)
+echo.

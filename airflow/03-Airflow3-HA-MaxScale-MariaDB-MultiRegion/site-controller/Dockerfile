@@ -3,8 +3,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY healthcheck.py .
-EXPOSE 8000
+COPY site_controller.py .
+EXPOSE 8100
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-CMD ["python", "healthcheck.py"]
+    CMD curl -f http://localhost:8100/health || exit 1
+
+# NOTA: Requiere montar docker.sock para controlar containers:
+#   volumes:
+#     - /var/run/docker.sock:/var/run/docker.sock:ro
+CMD ["python", "site_controller.py"]

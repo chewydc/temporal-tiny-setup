@@ -32,6 +32,14 @@
    redis       → Redis responde a PING
    db_primary  → La DB local es Master en MaxScale (via REST API)
 
+ MEJORAS v2.0:
+ ─────────────
+   - Reset automático de contadores cuando cambia el primary de DB
+   - Reset inteligente: detecta failovers exitosos sin depender de estado previo
+   - Thresholds reducidos para failover más rápido (FAILURE=2, RECOVERY=1)
+   - Detección inteligente de cambios de topología
+   - Funciona sin intervención humana, incluso después de reinicios
+
  ENDPOINTS:
  ──────────
    GET /health         → Estado detallado de todos los checks
@@ -65,9 +73,9 @@ CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '10'))
 ENABLED_CHECKS = [c.strip() for c in os.getenv('CHECKS', 'airflow,redis,db_primary').split(',') if c.strip()]
 CRITICAL_CHECKS = [c.strip() for c in os.getenv('CRITICAL_CHECKS', 'airflow,db_primary').split(',') if c.strip()]
 
-# --- Hysteresis ---
-FAILURE_THRESHOLD = int(os.getenv('FAILURE_THRESHOLD', '3'))
-RECOVERY_THRESHOLD = int(os.getenv('RECOVERY_THRESHOLD', '2'))
+# --- Hysteresis (v2.0: thresholds reducidos para failover más rápido) ---
+FAILURE_THRESHOLD = int(os.getenv('FAILURE_THRESHOLD', '2'))  # era 3
+RECOVERY_THRESHOLD = int(os.getenv('RECOVERY_THRESHOLD', '1'))  # era 2
 
 # --- Airflow ---
 AIRFLOW_URL = os.getenv('AIRFLOW_URL', 'http://localhost:8080')
@@ -311,6 +319,7 @@ async def check_loop(checker: HealthChecks):
     """Ejecuta todos los checks habilitados periódicamente."""
     logger.info(f"Checks habilitados: {ENABLED_CHECKS}")
     logger.info(f"Checks críticos:    {CRITICAL_CHECKS}")
+    logger.info(f"Thresholds v2.0:    FAILURE={FAILURE_THRESHOLD}, RECOVERY={RECOVERY_THRESHOLD}")
     if checker.custom_checks:
         logger.info(f"Custom checks:      {list(checker.custom_checks.keys())}")
 
@@ -458,7 +467,7 @@ async def main():
     site = aiohttp.web_runner.TCPSite(runner, '0.0.0.0', LISTEN_PORT)
     await site.start()
 
-    logger.info(f"Healthcheck service escuchando en :{LISTEN_PORT}")
+    logger.info(f"Healthcheck service v2.0 escuchando en :{LISTEN_PORT}")
     logger.info("  GET /health        → Estado detallado (monitoreo)")
     logger.info("  GET /region-health → Para HAProxy (200/503)")
     logger.info("  GET /ready         → Para site-controller (incluye needs_failover)")
