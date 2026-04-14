@@ -1,5 +1,31 @@
 # Caso 03: Airflow 3 Multi-Región Active/Passive HA
 
+## ✅ Recent Bug Fixes & Improvements
+
+### Fixed Ping-Pong Switchover Issue
+**Problem**: Site controllers were creating unstable ping-pong behavior, rapidly switching DB primary between regions.
+
+**Root Cause**: Incorrect switchover logic triggered switchovers when a region already had the DB locally.
+
+**Solution**: Fixed switchover logic to only trigger when `db_primary=False` and `needs_failover=True`.
+
+### Multi-MaxScale Failover Support
+**Enhancement**: Added support for multiple MaxScale URLs with automatic failover.
+
+**Configuration**: 
+```yaml
+environment:
+  - MAXSCALE_URLS=http://maxscale-hornos:8989,http://maxscale-sanlorenzo:8990
+```
+
+**Behavior**: Automatically tries backup MaxScale if primary is unavailable.
+
+### Correct MaxScale API Endpoint
+**Fixed**: Updated to use correct switchover API endpoint:
+```
+POST /v1/maxscale/modules/mariadbmon/switchover?{monitor-name}
+```
+
 ## Arquitectura
 
 ```
@@ -71,6 +97,16 @@
 
 ## Flujo de failover
 
+### ✅ Comportamiento Corregido
+**Escenario original del bug**: MaxScale local caído, necesita switchover
+1. **Hornos detecta**: MaxScale local down, `db_primary=False`, `needs_failover=True`
+2. **Hornos ejecuta switchover**: DB se mueve a San Lorenzo
+3. **San Lorenzo recibe DB**: Se vuelve ACTIVE
+4. **FIN**: No más switchovers porque San Lorenzo tiene `db_primary=True`
+
+**Antes (incorrecto)**: Ambas regiones hacían switchover cuando tenían la DB localmente
+**Ahora (correcto)**: Solo se hace switchover cuando NO se tiene la DB pero se necesita
+
 ### Estado normal
 ```
 Hornos:      DB=PRIMARY  → site-controller=ACTIVE  → scheduler=ON   → HAProxy=200
@@ -119,8 +155,26 @@ status.bat
 docker unpause mariadb-hornos
 
 # Switchover manual a Hornos (opcional)
-# Via MaxScale API:
-curl -u admin:mariadb -X POST http://localhost:8989/v1/maxscale/modules/mariadbmon/Replication-Monitor/switchover?HORNOS
+# Via MaxScale API (endpoint corregido):
+curl -u admin:mariadb -X POST http://localhost:8989/v1/maxscale/modules/mariadbmon/switchover?Replication-Monitor
+```
+
+### ✅ Probar el bug fix (MaxScale local caído)
+```bash
+# Simular MaxScale Hornos caído (el escenario original del bug)
+docker pause maxscale-hornos
+
+# Hornos detectará que necesita DB pero no la tiene localmente
+# Ejecutará switchover via maxscale-sanlorenzo (backup)
+# San Lorenzo recibirá la DB y se volverá ACTIVE
+# NO habrá ping-pong porque San Lorenzo ya tiene la DB
+
+# Verificar logs
+docker logs site-controller-hornos --tail 20
+docker logs site-controller-sanlorenzo --tail 20
+
+# Recuperar MaxScale Hornos
+docker unpause maxscale-hornos
 ```
 
 ### Endpoints
@@ -129,11 +183,19 @@ curl -u admin:mariadb -X POST http://localhost:8989/v1/maxscale/modules/mariadbm
 |---|---|
 | http://localhost:8080 | Airflow UI (via HAProxy → región activa) |
 | http://localhost:8404/stats | HAProxy stats |
-| http://localhost:8001/health | Site controller Hornos (detalle) |
-| http://localhost:8002/health | Site controller SanLorenzo (detalle) |
-| http://localhost:8001/role | Solo el rol (active/passive) |
+| http://localhost:8011/health | Site controller Hornos (detalle) |
+| http://localhost:8012/health | Site controller SanLorenzo (detalle) |
+| http://localhost:8011/role | Solo el rol (active/passive) |
 | http://localhost:8081 | Airflow Hornos directo |
 | http://localhost:8082 | Airflow SanLorenzo directo |
+
+### ✅ Nuevos Endpoints de Healthcheck
+| URL | Descripción |
+|---|---|
+| http://localhost:8001/health | Healthcheck Hornos (detalle) |
+| http://localhost:8002/health | Healthcheck SanLorenzo (detalle) |
+| http://localhost:8001/ready | Status para site-controller |
+| http://localhost:8002/ready | Status para site-controller |
 
 ## Puertos
 
@@ -147,8 +209,35 @@ curl -u admin:mariadb -X POST http://localhost:8989/v1/maxscale/modules/mariadbm
 | 8080 | HAProxy → Airflow |
 | 8081 | Airflow Hornos directo |
 | 8082 | Airflow SanLorenzo directo |
-| 8001 | Site Controller Hornos |
-| 8002 | Site Controller SanLorenzo |
+| 8001 | Healthcheck Hornos |
+| 8002 | Healthcheck SanLorenzo |
+| 8011 | Site Controller Hornos |
+| 8012 | Site Controller SanLorenzo |
 | 8404 | HAProxy Stats |
 | 8989 | MaxScale Hornos Admin |
 | 8990 | MaxScale SanLorenzo Admin |
+
+## ✅ Troubleshooting
+
+### Verificar estado del sistema
+```bash
+# Estado general
+status.bat
+
+# Logs de site-controllers
+docker logs site-controller-hornos --tail 20
+docker logs site-controller-sanlorenzo --tail 20
+
+# Logs de healthchecks
+docker logs healthcheck-hornos --tail 20
+docker logs healthcheck-sanlorenzo --tail 20
+
+# Estado de MaxScale
+curl -u admin:mariadb http://localhost:8989/v1/servers
+curl -u admin:mariadb http://localhost:8990/v1/servers
+```
+
+### Problemas comunes
+1. **Ping-pong behavior**: Verificar que se esté usando la lógica corregida
+2. **MaxScale connection failures**: Verificar MAXSCALE_URLS en docker-compose.yml
+3. **Switchover API errors**: Verificar formato del endpoint y nombre del monitor

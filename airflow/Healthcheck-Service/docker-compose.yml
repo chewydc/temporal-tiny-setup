@@ -1,0 +1,129 @@
+# ============================================================================
+# HEALTHCHECK SERVICE + SITE CONTROLLER - STANDALONE DEPLOYMENT
+# ============================================================================
+# This is a standalone version for testing the healthcheck and site-controller
+# components independently from the full Airflow HA setup.
+# ============================================================================
+
+services:
+
+  # ============================================================================
+  # HEALTHCHECK SENSOR — Observes and reports system health
+  # ============================================================================
+  healthcheck-hornos:
+    build: ./healthcheck
+    container_name: healthcheck-hornos
+    hostname: healthcheck-hornos
+    environment:
+      - REGION_NAME=hornos
+      - AIRFLOW_URL=http://airflow-apiserver-hornos:8080
+      - MAXSCALE_URL=http://maxscale-hornos:8989
+      - MAXSCALE_USER=admin
+      - MAXSCALE_PASS=mariadb
+      - LOCAL_DB_SERVER=HORNOS
+      - REDIS_HOST=redis-hornos
+      - REDIS_PORT=6379
+      - CHECKS=airflow,redis,db_primary
+      - CRITICAL_CHECKS=airflow,db_primary
+      - CHECK_INTERVAL=10
+      - FAILURE_THRESHOLD=2
+      - RECOVERY_THRESHOLD=1
+      - LISTEN_PORT=8000
+    ports:
+      - "8001:8000"
+    networks:
+      - healthcheck-net
+    restart: unless-stopped
+
+  healthcheck-sanlorenzo:
+    build: ./healthcheck
+    container_name: healthcheck-sanlorenzo
+    hostname: healthcheck-sanlorenzo
+    environment:
+      - REGION_NAME=sanlorenzo
+      - AIRFLOW_URL=http://airflow-apiserver-sanlorenzo:8080
+      - MAXSCALE_URL=http://maxscale-sanlorenzo:8990
+      - MAXSCALE_USER=admin
+      - MAXSCALE_PASS=mariadb
+      - LOCAL_DB_SERVER=SANLORENZO
+      - REDIS_HOST=redis-sanlorenzo
+      - REDIS_PORT=6379
+      - CHECKS=airflow,redis,db_primary
+      - CRITICAL_CHECKS=airflow,db_primary
+      - CHECK_INTERVAL=10
+      - FAILURE_THRESHOLD=2
+      - RECOVERY_THRESHOLD=1
+      - LISTEN_PORT=8000
+    ports:
+      - "8002:8000"
+    networks:
+      - healthcheck-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # SITE CONTROLLERS — Actuators that control scheduler and DB switchover
+  # Fixed switchover logic: only switchover when db_primary=False and needs_failover=True
+  # ============================================================================
+  site-controller-hornos:
+    build: ./site-controller
+    container_name: site-controller-hornos
+    hostname: site-controller-hornos
+    environment:
+      - REGION_NAME=hornos
+      - HEALTHCHECK_URL=http://healthcheck-hornos:8000
+      - MAXSCALE_URLS=http://maxscale-hornos:8989,http://maxscale-sanlorenzo:8990
+      - MAXSCALE_USER=admin
+      - MAXSCALE_PASS=mariadb
+      - LOCAL_DB_SERVER=HORNOS
+      - MAXSCALE_MONITOR=Replication-Monitor
+      - SCHEDULER_CONTAINER=airflow-scheduler-hornos
+      - DAG_PROCESSOR_CONTAINER=airflow-dag-processor-hornos
+      - FORCE_SWITCHOVER=true
+      - SWITCHOVER_THRESHOLD=3
+      - FAILOVER_THRESHOLD=2
+      - RECOVERY_THRESHOLD=1
+      - CHECK_INTERVAL=10
+      - LISTEN_PORT=8100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8011:8100"
+    depends_on:
+      - healthcheck-hornos
+    networks:
+      - healthcheck-net
+    restart: unless-stopped
+
+  site-controller-sanlorenzo:
+    build: ./site-controller
+    container_name: site-controller-sanlorenzo
+    hostname: site-controller-sanlorenzo
+    environment:
+      - REGION_NAME=sanlorenzo
+      - HEALTHCHECK_URL=http://healthcheck-sanlorenzo:8000
+      - MAXSCALE_URLS=http://maxscale-sanlorenzo:8990,http://maxscale-hornos:8989
+      - MAXSCALE_USER=admin
+      - MAXSCALE_PASS=mariadb
+      - LOCAL_DB_SERVER=SANLORENZO
+      - MAXSCALE_MONITOR=Replication-Monitor
+      - SCHEDULER_CONTAINER=airflow-scheduler-sanlorenzo
+      - DAG_PROCESSOR_CONTAINER=airflow-dag-processor-sanlorenzo
+      - FORCE_SWITCHOVER=true
+      - SWITCHOVER_THRESHOLD=3
+      - FAILOVER_THRESHOLD=2
+      - RECOVERY_THRESHOLD=1
+      - CHECK_INTERVAL=10
+      - LISTEN_PORT=8100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8012:8100"
+    depends_on:
+      - healthcheck-sanlorenzo
+    networks:
+      - healthcheck-net
+    restart: unless-stopped
+
+networks:
+  healthcheck-net:
+    driver: bridge

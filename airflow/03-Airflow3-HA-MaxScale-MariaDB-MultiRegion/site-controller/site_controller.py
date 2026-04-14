@@ -75,7 +75,9 @@ CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '10'))
 HEALTHCHECK_URL = os.getenv('HEALTHCHECK_URL', 'http://healthcheck-hornos:8000')
 
 # --- MaxScale (para consultar DB primary y forzar switchover) ---
-MAXSCALE_URL = os.getenv('MAXSCALE_URL', 'http://maxscale-hornos:8989')
+# Soporte para múltiples MaxScale URLs separadas por coma
+MAXSCALE_URLS = os.getenv('MAXSCALE_URLS', 'http://maxscale-hornos:8989').split(',')
+MAXSCALE_URL = MAXSCALE_URLS[0]  # Backward compatibility
 MAXSCALE_USER = os.getenv('MAXSCALE_USER', 'admin')
 MAXSCALE_PASS = os.getenv('MAXSCALE_PASS', 'mariadb')
 LOCAL_DB_SERVER = os.getenv('LOCAL_DB_SERVER', 'HORNOS')
@@ -152,7 +154,7 @@ class SiteController:
         logger.info(f"  SITE CONTROLLER — Región: {REGION_NAME}")
         logger.info("=" * 70)
         logger.info(f"  Healthcheck URL:   {HEALTHCHECK_URL}")
-        logger.info(f"  MaxScale URL:      {MAXSCALE_URL}")
+        logger.info(f"  MaxScale URLs:     {', '.join(MAXSCALE_URLS)}")
         logger.info(f"  Local DB Server:   {LOCAL_DB_SERVER}")
         logger.info(f"  Scheduler:         {SCHEDULER_CONTAINER}")
         logger.info(f"  Force Switchover:  {'✅ habilitado' if FORCE_SWITCHOVER else '⛔ deshabilitado'}")
@@ -182,18 +184,25 @@ class SiteController:
             return {"critical_healthy": False, "needs_failover": False, "error": str(e)}
 
     async def check_db_is_primary(self) -> bool:
-        """Consulta MaxScale directamente para saber si la DB local es primary."""
-        try:
-            url = f"{MAXSCALE_URL}/v1/servers/{LOCAL_DB_SERVER}"
-            auth = aiohttp.BasicAuth(MAXSCALE_USER, MAXSCALE_PASS)
-            async with self.session.get(url, auth=auth) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    state = data.get("data", {}).get("attributes", {}).get("state", "")
-                    return "Master" in state and "Running" in state
-                return False
-        except Exception:
-            return False
+        """Consulta MaxScale directamente para saber si la DB local es primary.
+        Intenta con todas las URLs configuradas hasta encontrar una que responda.
+        """
+        auth = aiohttp.BasicAuth(MAXSCALE_USER, MAXSCALE_PASS)
+        
+        for maxscale_url in MAXSCALE_URLS:
+            try:
+                url = f"{maxscale_url.strip()}/v1/servers/{LOCAL_DB_SERVER}"
+                async with self.session.get(url, auth=auth) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        state = data.get("data", {}).get("attributes", {}).get("state", "")
+                        return "Master" in state and "Running" in state
+            except Exception as e:
+                logger.debug(f"MaxScale {maxscale_url} no disponible: {e}")
+                continue
+        
+        logger.warning("Ningún MaxScale disponible para consultar estado de DB")
+        return False
 
     # =========================================================================
     # ACCIONES: SCHEDULER
@@ -250,6 +259,7 @@ class SiteController:
     async def force_db_switchover(self) -> bool:
         """
         Fuerza un switchover en MaxScale para mover el primary a otra región.
+        Intenta con todas las URLs configuradas hasta encontrar una que responda.
 
         MaxScale API:
           POST /v1/maxscale/modules/mariadbmon/{monitor}/switchover
@@ -271,23 +281,28 @@ class SiteController:
         logger.info(f"  Monitor: {MAXSCALE_MONITOR}")
         logger.info("=" * 70)
 
-        try:
-            url = f"{MAXSCALE_URL}/v1/maxscale/modules/mariadbmon/{MAXSCALE_MONITOR}/switchover"
-            auth = aiohttp.BasicAuth(MAXSCALE_USER, MAXSCALE_PASS)
-
-            async with self.session.post(url, auth=auth) as resp:
-                if resp.status == 204:
-                    logger.info("✅ Switchover ejecutado exitosamente")
-                    site_state["last_switchover_forced"] = datetime.now().isoformat()
-                    return True
-                else:
-                    body = await resp.text()
-                    logger.error(f"❌ Switchover falló: HTTP {resp.status} — {body}")
-                    return False
-
-        except Exception as e:
-            logger.error(f"❌ Error al forzar switchover: {e}")
-            return False
+        auth = aiohttp.BasicAuth(MAXSCALE_USER, MAXSCALE_PASS)
+        
+        for maxscale_url in MAXSCALE_URLS:
+            try:
+                url = f"{maxscale_url.strip()}/v1/maxscale/modules/mariadbmon/switchover?{MAXSCALE_MONITOR}"
+                logger.info(f"  Intentando switchover via: {maxscale_url}")
+                
+                async with self.session.post(url, auth=auth) as resp:
+                    if resp.status == 204:
+                        logger.info(f"✅ Switchover ejecutado exitosamente via {maxscale_url}")
+                        site_state["last_switchover_forced"] = datetime.now().isoformat()
+                        return True
+                    else:
+                        body = await resp.text()
+                        logger.warning(f"⚠️ Switchover falló en {maxscale_url}: HTTP {resp.status} — {body}")
+                        
+            except Exception as e:
+                logger.warning(f"⚠️ Error al conectar con {maxscale_url}: {e}")
+                continue
+        
+        logger.error("❌ Switchover falló: ningún MaxScale disponible")
+        return False
 
     # =========================================================================
     # LOOP PRINCIPAL
@@ -351,27 +366,22 @@ class SiteController:
                         site_state["last_transition"] = datetime.now().isoformat()
                         site_state["transition_reason"] = "db_primary_local_and_healthy"
 
-                # Caso B: DB primary + check crítico falla → FORZAR SWITCHOVER
-                elif db_primary and needs_failover:
+                # Caso B: No tenemos DB local pero la necesitamos → FORZAR SWITCHOVER
+                elif not db_primary and needs_failover:
                     if site_state["consecutive_failover_needed"] >= SWITCHOVER_THRESHOLD:
                         if FORCE_SWITCHOVER:
                             logger.info("=" * 70)
                             logger.info(f"  ⚠️  FORCED SWITCHOVER: {REGION_NAME}")
-                            logger.info(f"  DB es primary local pero checks críticos fallan")
-                            logger.info(f"  Forzando switchover para mover DB a otra región")
+                            logger.info(f"  DB no es local pero necesitamos acceso")
+                            logger.info(f"  Forzando switchover para traer DB a esta región")
                             logger.info("=" * 70)
 
-                            # Primero parar scheduler local
-                            await self.stop_scheduler()
-                            site_state["role"] = "passive"
-                            site_state["last_transition"] = datetime.now().isoformat()
-                            site_state["transition_reason"] = "forced_switchover_critical_failure"
-
                             # Forzar switchover de DB
-                            await self.force_db_switchover()
-
-                            # Reset counter para no re-ejecutar inmediatamente
-                            site_state["consecutive_failover_needed"] = 0
+                            success = await self.force_db_switchover()
+                            
+                            if success:
+                                # Reset counter para no re-ejecutar inmediatamente
+                                site_state["consecutive_failover_needed"] = 0
                         else:
                             logger.warning(
                                 f"Switchover necesario pero FORCE_SWITCHOVER=false. "

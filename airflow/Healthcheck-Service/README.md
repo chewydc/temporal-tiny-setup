@@ -1,303 +1,194 @@
 # Healthcheck Service + Site Controller
 
-## Evolución del diseño
+## Overview
 
-Este componente evolucionó en tres etapas:
+This directory contains standalone versions of the healthcheck and site-controller components for Airflow HA setup. These components work together to provide automatic failover capabilities.
 
-1. **Healthcheck simple** — Evaluaba salud de Airflow, exponía endpoint para HAProxy
-2. **Healthcheck + Site Controller (un servicio)** — Agregó control del scheduler basado en DB primary
-3. **Dos microservicios separados (actual)** — Separación de concerns para producción
+## Components
 
-La separación en dos servicios responde a necesidades reales de producción:
-- Ciclos de vida independientes (actualizar uno sin tocar el otro)
-- El healthcheck es **stateless** (sensor), el controller es **stateful** (actuador)
-- El healthcheck puede ser consumido por otros sistemas (Prometheus, alertas, dashboards)
-- Escalabilidad y monitoreo independiente
+### 1. Healthcheck Service
+- **Purpose**: Observes and reports system health status
+- **Type**: Stateless sensor
+- **Responsibilities**: 
+  - Monitor Airflow API health
+  - Monitor Redis connectivity
+  - Monitor DB primary status via MaxScale
+  - Report critical health status and failover needs
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  HEALTHCHECK (sensor)              SITE CONTROLLER (actuador)       │
-│  ┌───────────────────┐             ┌──────────────────────┐        │
-│  │ Observa:          │  GET /ready │ Decide:              │        │
-│  │  • Airflow API    │────────────▶│  • DB primary local  │        │
-│  │  • Redis          │             │    + checks OK       │        │
-│  │  • DB primary     │             │    → scheduler ON    │        │
-│  │  • Custom checks  │             │                      │        │
-│  │                   │             │  • DB primary local  │        │
-│  │ Reporta:          │             │    + check crítico   │        │
-│  │  • /health        │             │    FALLA             │        │
-│  │  • /region-health │             │    → FORZAR          │        │
-│  │  • /ready         │             │    SWITCHOVER DB     │        │
-│  │                   │             │                      │        │
-│  │ NO toma acciones  │             │  • DB no primary     │        │
-│  └───────────────────┘             │    → scheduler OFF   │        │
-│                                    └──────────┬───────────┘        │
-│                                               │                    │
-│                                    ┌──────────▼───────────┐        │
-│                                    │ Actúa via:           │        │
-│                                    │  • Docker API        │        │
-│                                    │    (pause/unpause)   │        │
-│                                    │  • MaxScale API      │        │
-│                                    │    (switchover)      │        │
-│                                    └──────────────────────┘        │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+### 2. Site Controller
+- **Purpose**: Acts on health status to control scheduler and DB failover
+- **Type**: Stateful actuator
+- **Responsibilities**:
+  - Follow DB primary (scheduler ON when DB is local)
+  - Control Airflow scheduler containers (pause/unpause)
+  - Force DB switchover when needed
+
+## Recent Bug Fixes
+
+### ✅ Fixed Ping-Pong Switchover Issue
+
+**Problem**: Site controllers were creating an unstable ping-pong effect, rapidly switching DB primary between regions.
+
+**Root Cause**: Incorrect switchover logic was triggering switchovers when a region already had the DB locally but had critical check failures.
+
+**Solution**: Fixed switchover logic to only trigger when:
+- `db_primary=False` (region doesn't have DB locally)
+- `needs_failover=True` (region needs DB access)
+
+**Before (incorrect)**:
+```python
+# Triggered switchover when already had DB locally
+elif db_primary and needs_failover:
 ```
 
-## El problema que resuelve el switchover forzado
-
-Sin switchover forzado, hay un escenario de deadlock:
-
-```
-Hornos:      DB=PRIMARY, Airflow=MUERTO  → no puede servir
-SanLorenzo:  DB=REPLICA, Airflow=OK      → no se promueve (DB no es primary)
-
-Resultado: NADIE sirve. Deadlock.
+**After (correct)**:
+```python
+# Only triggers switchover when DB is needed but not local
+elif not db_primary and needs_failover:
 ```
 
-Con switchover forzado:
+### ✅ Multi-MaxScale Failover Support
 
+**Enhancement**: Added support for multiple MaxScale URLs with automatic failover.
+
+**Configuration**:
+```yaml
+environment:
+  - MAXSCALE_URLS=http://maxscale-hornos:8989,http://maxscale-sanlorenzo:8990
 ```
-1. Healthcheck-hornos detecta: airflow=unhealthy (check crítico)
-2. Site-controller-hornos ve: needs_failover=true + DB es primary local
-3. Después de N checks consecutivos → fuerza switchover via MaxScale
-4. MaxScale promueve mariadb-sanlorenzo a PRIMARY
-5. Site-controller-sanlorenzo detecta DB primary local → ACTIVE
-6. Problema resuelto automáticamente
+
+**Behavior**: 
+- Tries primary MaxScale first
+- Automatically fails over to backup MaxScale if primary is unavailable
+- Uses correct switchover API endpoint: `/v1/maxscale/modules/mariadbmon/switchover?{monitor}`
+
+## Configuration
+
+### Environment Variables
+
+#### Healthcheck Service
+```yaml
+environment:
+  - REGION_NAME=hornos                    # Region identifier
+  - AIRFLOW_URL=http://airflow:8080       # Airflow API endpoint
+  - MAXSCALE_URL=http://maxscale:8989     # MaxScale API endpoint
+  - MAXSCALE_USER=admin                   # MaxScale credentials
+  - MAXSCALE_PASS=mariadb
+  - LOCAL_DB_SERVER=HORNOS                # Local DB server name in MaxScale
+  - REDIS_HOST=redis-hornos               # Redis connection
+  - REDIS_PORT=6379
+  - CHECKS=airflow,redis,db_primary       # Health checks to perform
+  - CRITICAL_CHECKS=airflow,db_primary    # Critical checks for failover
+  - CHECK_INTERVAL=10                     # Check frequency (seconds)
+  - FAILURE_THRESHOLD=2                   # Failures before marking unhealthy
+  - RECOVERY_THRESHOLD=1                  # Successes before marking healthy
 ```
 
-## Checks configurables
+#### Site Controller
+```yaml
+environment:
+  - REGION_NAME=hornos                              # Region identifier
+  - HEALTHCHECK_URL=http://healthcheck:8000         # Local healthcheck URL
+  - MAXSCALE_URLS=http://maxscale1:8989,http://maxscale2:8990  # Multiple MaxScale URLs
+  - MAXSCALE_USER=admin                             # MaxScale credentials
+  - MAXSCALE_PASS=mariadb
+  - LOCAL_DB_SERVER=HORNOS                          # Local DB server name
+  - MAXSCALE_MONITOR=Replication-Monitor            # MaxScale monitor name
+  - SCHEDULER_CONTAINER=airflow-scheduler-hornos    # Scheduler container name
+  - DAG_PROCESSOR_CONTAINER=airflow-dag-processor-hornos  # DAG processor container
+  - FORCE_SWITCHOVER=true                           # Enable automatic switchover
+  - SWITCHOVER_THRESHOLD=3                          # Checks before switchover
+  - FAILOVER_THRESHOLD=2                            # Checks before demote
+  - RECOVERY_THRESHOLD=1                            # Checks before promote
+  - CHECK_INTERVAL=10                               # Check frequency (seconds)
+```
 
-El healthcheck soporta checks configurables via variables de entorno. Cada check puede ser:
-- **Habilitado/deshabilitado** → variable `CHECKS`
-- **Crítico o informativo** → variable `CRITICAL_CHECKS`
+## Decision Logic
 
-Un check **crítico** que falla dispara el flag `needs_failover`. Un check **informativo** que falla se reporta pero no dispara acción.
+### Site Controller States
 
-### Checks built-in
+1. **ACTIVE**: 
+   - Conditions: `db_primary=True` AND `critical_healthy=True`
+   - Actions: Scheduler ON, HAProxy returns 200
 
-| Check | Qué evalúa | Recomendación |
-|---|---|---|
-| `airflow` | Airflow API Server responde en /api/v2/monitor/health | **Crítico** — sin API Server no hay servicio |
-| `redis` | Redis responde a PING | **Informativo** — Redis se reinicia rápido, no justifica mover DB |
-| `db_primary` | DB local es Master en MaxScale | **Crítico** — sin DB primary no hay escrituras |
+2. **PASSIVE**: 
+   - Conditions: `db_primary=False` OR `critical_healthy=False`
+   - Actions: Scheduler OFF, HAProxy returns 503
 
-### Checks custom (extensible)
+3. **SWITCHOVER**: 
+   - Conditions: `db_primary=False` AND `needs_failover=True` for `SWITCHOVER_THRESHOLD` consecutive checks
+   - Actions: Force DB switchover via MaxScale API
 
-Para agregar checks sin tocar código:
+### Correct Failover Scenario
 
+1. **Initial State**: Hornos ACTIVE (has DB), San Lorenzo PASSIVE
+2. **MaxScale Hornos goes down**: Hornos loses DB access
+3. **Hornos detects**: `db_primary=False` and `needs_failover=True`
+4. **Hornos executes switchover**: DB moves to San Lorenzo
+5. **San Lorenzo detects**: `db_primary=True` and `critical_healthy=True`
+6. **San Lorenzo promotes**: Becomes ACTIVE
+7. **Stable**: San Lorenzo ACTIVE, Hornos PASSIVE - no more switchovers
+
+## API Endpoints
+
+### Healthcheck Service
+- `GET /health` - Detailed health status
+- `GET /ready` - Ready status for site-controller consumption
+
+### Site Controller
+- `GET /health` - Detailed controller state
+- `GET /region-health` - HAProxy health check (200/503)
+- `GET /role` - Current role (active/passive)
+
+## Usage
+
+### Standalone Deployment
 ```bash
-# Formato: nombre:url,nombre:url
-CUSTOM_CHECKS=vault:http://vault:8200/v1/sys/health,kafka:http://kafka:8083/health
-# Agregarlos a la lista de checks
-CHECKS=airflow,redis,db_primary,vault,kafka
-# Marcar como críticos si corresponde
-CRITICAL_CHECKS=airflow,db_primary,vault
+cd C:\Users\u603924\PycharmProjects\Automation\temporal-tiny-setup\airflow\Healthcheck-Service
+docker-compose up -d
 ```
 
-### Ejemplo: configuración conservadora (producción)
+### Integration with Full HA Setup
+Copy the corrected configuration to your main deployment:
+- Use `MAXSCALE_URLS` instead of `MAXSCALE_URL`
+- Ensure site_controller.py has the fixed switchover logic
 
-```yaml
-# Solo Airflow y DB son críticos. Redis es informativo.
-# Switchover forzado habilitado pero con threshold alto.
-environment:
-  CHECKS: "airflow,redis,db_primary"
-  CRITICAL_CHECKS: "airflow,db_primary"
-  FAILURE_THRESHOLD: "5"          # 5 checks fallidos antes de confirmar
-  CHECK_INTERVAL: "10"            # cada 10s
-  # → 50 segundos antes de declarar unhealthy
+## Monitoring
+
+### Health Check URLs
+- Hornos Healthcheck: http://localhost:8001/health
+- San Lorenzo Healthcheck: http://localhost:8002/health
+- Hornos Site Controller: http://localhost:8011/health
+- San Lorenzo Site Controller: http://localhost:8012/health
+
+### Log Monitoring
+```bash
+# Watch site controller logs
+docker logs -f site-controller-hornos
+docker logs -f site-controller-sanlorenzo
+
+# Watch healthcheck logs
+docker logs -f healthcheck-hornos
+docker logs -f healthcheck-sanlorenzo
 ```
 
-### Ejemplo: configuración agresiva (desarrollo)
+## Troubleshooting
 
-```yaml
-environment:
-  CHECKS: "airflow,redis,db_primary"
-  CRITICAL_CHECKS: "airflow,redis,db_primary"  # todo es crítico
-  FAILURE_THRESHOLD: "2"
-  CHECK_INTERVAL: "5"
-  # → 10 segundos antes de declarar unhealthy
-```
+### Common Issues
 
-## Estructura de carpetas
+1. **Ping-pong behavior**: Ensure you're using the fixed switchover logic
+2. **MaxScale connection failures**: Check MAXSCALE_URLS configuration
+3. **Docker socket permissions**: Ensure site-controller can access `/var/run/docker.sock`
+4. **Switchover API errors**: Verify MaxScale monitor name and API endpoint format
 
-```
-Healthcheck-Service/
-├── healthcheck/                  # Microservicio 1: Sensor
-│   ├── healthcheck.py            # Checks configurables + hysteresis
-│   ├── Dockerfile
-│   └── requirements.txt
-├── site-controller/              # Microservicio 2: Actuador
-│   ├── site_controller.py        # Consume healthcheck, controla scheduler
-│   ├── Dockerfile
-│   └── requirements.txt
-├── healthcheck.py                # Versión monolítica (un solo servicio)
-├── Dockerfile                    # Dockerfile de la versión monolítica
-├── requirements.txt
-└── README.md                     # Este archivo
-```
+### Debug Commands
+```bash
+# Check MaxScale server status
+curl -u admin:mariadb http://localhost:8989/v1/servers/HORNOS
 
-La **versión monolítica** (`healthcheck.py` en la raíz) se mantiene como referencia y para demos. Para producción, usar los dos servicios separados.
+# Force manual switchover
+curl -u admin:mariadb -X POST http://localhost:8989/v1/maxscale/modules/mariadbmon/switchover?Replication-Monitor
 
-## Deploy: docker-compose
-
-```yaml
-# ─── HEALTHCHECK (sensor) ───
-healthcheck-hornos:
-  build: ./Healthcheck-Service/healthcheck
-  environment:
-    - REGION_NAME=hornos
-    - AIRFLOW_URL=http://airflow-apiserver-hornos:8080
-    - MAXSCALE_URL=http://maxscale-hornos:8989
-    - LOCAL_DB_SERVER=HORNOS
-    - REDIS_HOST=redis-hornos
-    - CHECKS=airflow,redis,db_primary
-    - CRITICAL_CHECKS=airflow,db_primary
-    - CHECK_INTERVAL=10
-    - FAILURE_THRESHOLD=3
-  ports:
-    - "8001:8000"
-
-# ─── SITE CONTROLLER (actuador) ───
-site-controller-hornos:
-  build: ./Healthcheck-Service/site-controller
-  environment:
-    - REGION_NAME=hornos
-    - HEALTHCHECK_URL=http://healthcheck-hornos:8000
-    - MAXSCALE_URL=http://maxscale-hornos:8989
-    - LOCAL_DB_SERVER=HORNOS
-    - MAXSCALE_MONITOR=Replication-Monitor
-    - SCHEDULER_CONTAINER=airflow-scheduler-hornos
-    - DAG_PROCESSOR_CONTAINER=airflow-dag-processor-hornos
-    - FORCE_SWITCHOVER=true
-    - SWITCHOVER_THRESHOLD=5
-    - CHECK_INTERVAL=10
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock:ro
-  ports:
-    - "8011:8100"
-```
-
-## Deploy: OpenShift / Kubernetes
-
-```yaml
-# ─── ConfigMap (compartido) ───
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ha-config-hornos
-data:
-  REGION_NAME: "hornos"
-  CHECKS: "airflow,redis,db_primary"
-  CRITICAL_CHECKS: "airflow,db_primary"
-  CHECK_INTERVAL: "10"
-  FAILURE_THRESHOLD: "3"
-  FORCE_SWITCHOVER: "true"
-  SWITCHOVER_THRESHOLD: "5"
-
----
-# ─── Healthcheck Deployment ───
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: healthcheck-hornos
-spec:
-  replicas: 1
-  template:
-    spec:
-      containers:
-        - name: healthcheck
-          image: registry.internal/healthcheck:latest
-          envFrom:
-            - configMapRef:
-                name: ha-config-hornos
-          env:
-            - name: AIRFLOW_URL
-              value: "http://airflow-apiserver:8080"
-            - name: MAXSCALE_URL
-              value: "http://maxscale:8989"
-          ports:
-            - containerPort: 8000
-
----
-# ─── Site Controller Deployment ───
-# En Kubernetes, en lugar de docker.sock, el controller
-# escalaría el Deployment del scheduler a 0/1 réplicas
-# via Kubernetes API.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: site-controller-hornos
-spec:
-  replicas: 1
-  template:
-    spec:
-      serviceAccountName: site-controller  # necesita permisos para scale
-      containers:
-        - name: controller
-          image: registry.internal/site-controller:latest
-          envFrom:
-            - configMapRef:
-                name: ha-config-hornos
-          env:
-            - name: HEALTHCHECK_URL
-              value: "http://healthcheck-hornos:8000"
-            - name: MAXSCALE_URL
-              value: "http://maxscale:8989"
-          ports:
-            - containerPort: 8100
-```
-
-## Endpoints
-
-### Healthcheck (puerto 8000)
-
-| Endpoint | Uso | Respuesta |
-|---|---|---|
-| `GET /health` | Monitoreo/debugging | 200 siempre, estado detallado de todos los checks |
-| `GET /region-health` | HAProxy | 200 si critical checks OK, 503 si no |
-| `GET /ready` | Site-controller | 200 siempre, incluye `needs_failover` flag |
-
-### Site Controller (puerto 8100)
-
-| Endpoint | Uso | Respuesta |
-|---|---|---|
-| `GET /health` | Monitoreo/debugging | 200 siempre, estado del controller |
-| `GET /region-health` | HAProxy (alternativo) | 200 si ACTIVE + healthy, 503 si no |
-| `GET /role` | Scripts | 200 siempre, solo el rol |
-
-## Flujo completo de failover
-
-### Escenario: Airflow cae en la región activa
-
-```
-t=0s    Airflow cae en Hornos
-t=10s   healthcheck-hornos: airflow=unhealthy (count=1/3)
-t=20s   healthcheck-hornos: airflow=unhealthy (count=2/3)
-t=30s   healthcheck-hornos: airflow=unhealthy (count=3/3) → needs_failover=true
-t=30s   site-controller-hornos: ve needs_failover=true (sw_count=1/5)
-t=40s   site-controller-hornos: sw_count=2/5
-t=50s   site-controller-hornos: sw_count=3/5
-t=60s   site-controller-hornos: sw_count=4/5
-t=70s   site-controller-hornos: sw_count=5/5 → FORZAR SWITCHOVER
-t=70s   site-controller-hornos: pause scheduler, POST switchover a MaxScale
-t=72s   MaxScale promueve mariadb-sanlorenzo a PRIMARY
-t=82s   site-controller-sanlorenzo: DB primary local (count=1/2)
-t=92s   site-controller-sanlorenzo: DB primary local (count=2/2) → PROMOTE
-t=92s   site-controller-sanlorenzo: unpause scheduler → ACTIVE
-
-Tiempo total: ~90 segundos (configurable bajando thresholds)
-```
-
-### Escenario: MariaDB cae en la región activa
-
-```
-t=0s    mariadb-hornos cae
-t=6s    MaxScale detecta y promueve mariadb-sanlorenzo (~failcount=3)
-t=16s   site-controller-sanlorenzo: DB primary local (count=1/2)
-t=26s   site-controller-sanlorenzo: DB primary local (count=2/2) → PROMOTE
-t=36s   site-controller-hornos: DB no primary (count=3/3) → DEMOTE
-
-Tiempo total: ~26 segundos (no necesita switchover forzado)
+# Check site controller state
+curl http://localhost:8011/health
 ```

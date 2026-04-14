@@ -336,7 +336,7 @@ services:
     environment:
       - REGION_NAME=hornos
       - HEALTHCHECK_URL=http://healthcheck-hornos:8000
-      - MAXSCALE_URL=http://maxscale-hornos:8989
+      - MAXSCALE_URLS=http://maxscale-hornos:8989,http://maxscale-sanlorenzo:8990
       - MAXSCALE_USER=admin
       - MAXSCALE_PASS=mariadb
       - LOCAL_DB_SERVER=HORNOS
@@ -366,7 +366,7 @@ services:
     environment:
       - REGION_NAME=sanlorenzo
       - HEALTHCHECK_URL=http://healthcheck-sanlorenzo:8000
-      - MAXSCALE_URL=http://maxscale-sanlorenzo:8990
+      - MAXSCALE_URLS=http://maxscale-sanlorenzo:8990,http://maxscale-hornos:8989
       - MAXSCALE_USER=admin
       - MAXSCALE_PASS=mariadb
       - LOCAL_DB_SERVER=SANLORENZO
