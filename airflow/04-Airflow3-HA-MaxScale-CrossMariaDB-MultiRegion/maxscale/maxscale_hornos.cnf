@@ -1,0 +1,70 @@
+#HORNOS - MAXSCALE NODE 1
+[maxscale]
+threads=auto
+skip_name_resolve=true
+log_info=true
+log_warning=true
+admin_host=0.0.0.0
+admin_port=8989
+admin_secure_gui=false
+
+[HORNOS]
+type=server
+address=mariadb-hornos
+port=3306
+protocol=MariaDBBackend
+
+[SANLORENZO]
+type=server
+address=mariadb-sanlorenzo
+port=3306
+protocol=MariaDBBackend
+
+[TUCUMAN]
+type=server
+address=mariadb-tucuman
+port=3306
+protocol=MariaDBBackend
+
+[Replication-Monitor]
+type=monitor
+module=mariadbmon
+servers=HORNOS, SANLORENZO, TUCUMAN
+servers_no_promotion=TUCUMAN
+user=monitor
+password=monitor_pass
+replication_user=repl_user
+replication_password=repl_pass
+monitor_interval=2000ms
+
+# Configuración según documento oficial
+auto_failover=true
+auto_rejoin=true
+failcount=3
+failover_timeout=10s
+switchover_timeout=10s
+enforce_read_only_slaves=true
+
+# Cooperative locking según documento
+cooperative_monitoring_locks=majority_of_running
+
+# SIN master_conditions (según documento)
+
+[Read-Write-Service]
+type=service
+router=readwritesplit
+servers=HORNOS, SANLORENZO, TUCUMAN
+user=maxscaleuser
+password=router_pass
+enable_root_user=true
+
+# Zero-interruption failover según documento
+master_reconnection=true
+master_failure_mode=fail_on_write
+transaction_replay=true
+
+[Read-Write-Listener]
+type=listener
+service=Read-Write-Service
+protocol=MariaDBClient
+port=4006

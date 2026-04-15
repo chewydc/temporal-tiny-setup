@@ -17,7 +17,9 @@ temporal-tiny-setup/
 ├── airflow/                      # Casos de uso con Airflow HA
 │   ├── 01-Airflow3-MaxScale-MariaDB/        # Airflow 3 HA con MaxScale
 │   ├── 02-Airflow3-HA-MaxScale-MariaDB/     # Airflow 3 HA con HAProxy
-│   └── 03-Airflow3-HA-MaxScale-MariaDB-MultiRegion/  # Multi-región con healthcheck
+│   ├── 03-Airflow3-HA-MaxScale-MariaDB-MultiRegion/  # Multi-región con healthcheck
+│   ├── 04-Airflow3-HA-MaxScale-CrossMariaDB-MultiRegion/  # Cross-DB multi-región
+│   └── Healthcheck-Service/                 # Servicio de healthcheck standalone
 └── README.md                     # Este archivo
 ```
 
@@ -80,6 +82,12 @@ temporal-tiny-setup/
 - **Objetivo**: Arquitectura multi-región con healthcheck inteligente y tolerancia a fallos
 - **Qué hace**: Despliega Airflow 3.x en 2 sitios (Hornos/San Lorenzo) con MaxScale local por sitio, HAProxy balanceando entre ambos, y microservicios de healthcheck con hysteresis para evitar switchovers innecesarios durante fallos temporales.
 - **Características**: Multi-región, healthcheck con tolerancia a fallos, hysteresis configurable, balanceo inteligente
+
+### [Caso 04: Airflow 3 Cross-DB Multi-Región](airflow/04-Airflow3-HA-MaxScale-CrossMariaDB-MultiRegion/)
+- **Tecnologías**: Airflow 3.x, MariaDB, MaxScale (árbitro), HAProxy, Microservicios de Healthcheck y Site-Controller
+- **Objetivo**: Arquitectura Active/Passive donde la DB puede estar en cualquier región sin forzar failover de sitio
+- **Qué hace**: Evolución del Caso 03. MaxScale actúa como árbitro: cada región consulta su MaxScale local para saber si hay un Master disponible (sin importar en qué región esté). El site-controller decide ACTIVE/PASSIVE usando preferred-region + cross-check del peer. Anti split-brain delegado a MaxScale con `cooperative_monitoring_locks`.
+- **Características**: Cross-DB transparente, MaxScale como árbitro, preferred-region con peer cross-check, sin lógica de switchover de DB, preparado para OpenShift (scale-to-zero)
 
 ## 🚀 Inicio Rápido
 
