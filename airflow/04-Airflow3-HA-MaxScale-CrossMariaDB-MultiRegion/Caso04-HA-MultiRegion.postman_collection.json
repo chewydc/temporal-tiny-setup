@@ -1,0 +1,789 @@
+{
+	"info": {
+		"name": "Caso 04 — Airflow HA Multi-Region Cross-DB",
+		"description": "Collection completa para el laboratorio del Caso 04.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "🔀 HAProxy (GSLB)",
+			"item": [
+				{
+					"name": "Airflow Health (via GSLB)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v2/monitor/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "v2", "monitor", "health"]
+						}
+					}
+				},
+				{
+					"name": "HAProxy Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8404/stats",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8404",
+							"path": ["stats"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "✈️ Airflow — Hornos (8081)",
+			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/monitor/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "monitor", "health"]
+						}
+					}
+				},
+				{
+					"name": "DAGs list",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/dags",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "dags"]
+						}
+					}
+				},
+				{
+					"name": "DAG Runs list",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/dags/~/dagRuns",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "dags", "~", "dagRuns"]
+						}
+					}
+				},
+				{
+					"name": "Config",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/config",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "config"]
+						}
+					}
+				},
+				{
+					"name": "Pools",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/pools",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "pools"]
+						}
+					}
+				},
+				{
+					"name": "Version",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/v2/version",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "v2", "version"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "✈️ Airflow — San Lorenzo (8082)",
+			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/monitor/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "monitor", "health"]
+						}
+					}
+				},
+				{
+					"name": "DAGs list",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/dags",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "dags"]
+						}
+					}
+				},
+				{
+					"name": "DAG Runs list",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/dags/~/dagRuns",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "dags", "~", "dagRuns"]
+						}
+					}
+				},
+				{
+					"name": "Config",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/config",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "config"]
+						}
+					}
+				},
+				{
+					"name": "Pools",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/pools",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "pools"]
+						}
+					}
+				},
+				{
+					"name": "Version",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v2/version",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8082",
+							"path": ["api", "v2", "version"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🩺 Healthcheck — Hornos (8001)",
+			"item": [
+				{
+					"name": "/health — Estado detallado",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8001",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "/region-health — 200/503",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/region-health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8001",
+							"path": ["region-health"]
+						}
+					}
+				},
+				{
+					"name": "/ready — Para Site Controller",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/ready",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8001",
+							"path": ["ready"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🩺 Healthcheck — San Lorenzo (8002)",
+			"item": [
+				{
+					"name": "/health — Estado detallado",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "/region-health — 200/503",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/region-health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["region-health"]
+						}
+					}
+				},
+				{
+					"name": "/ready — Para Site Controller",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/ready",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["ready"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🎛️ Site Controller — Hornos (8011)",
+			"item": [
+				{
+					"name": "/health — Estado del controller",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8011/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8011",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "/region-health — Para GSLB (200/503)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8011/region-health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8011",
+							"path": ["region-health"]
+						}
+					}
+				},
+				{
+					"name": "/role — Solo el rol",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8011/role",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8011",
+							"path": ["role"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🎛️ Site Controller — San Lorenzo (8012)",
+			"item": [
+				{
+					"name": "/health — Estado del controller",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8012/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8012",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "/region-health — Para GSLB (200/503)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8012/region-health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8012",
+							"path": ["region-health"]
+						}
+					}
+				},
+				{
+					"name": "/role — Solo el rol",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8012/role",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8012",
+							"path": ["role"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🗄️ MaxScale — Hornos (8989)",
+			"item": [
+				{
+					"name": "Servers (topología DB)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/servers",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "servers"]
+						}
+					}
+				},
+				{
+					"name": "Server HORNOS",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/servers/HORNOS",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "servers", "HORNOS"]
+						}
+					}
+				},
+				{
+					"name": "Server SANLORENZO",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/servers/SANLORENZO",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "servers", "SANLORENZO"]
+						}
+					}
+				},
+				{
+					"name": "Server TUCUMAN",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/servers/TUCUMAN",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "servers", "TUCUMAN"]
+						}
+					}
+				},
+				{
+					"name": "Monitors",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/monitors",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "monitors"]
+						}
+					}
+				},
+				{
+					"name": "Services",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/services",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "services"]
+						}
+					}
+				},
+				{
+					"name": "MaxScale status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/maxscale",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "maxscale"]
+						}
+					}
+				},
+				{
+					"name": "⚠️ Switchover (mover Master)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/maxscale/modules/mariadbmon/switchover?Replication-Monitor",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "maxscale", "modules", "mariadbmon", "switchover"],
+							"query": [{"key": "Replication-Monitor", "value": null}]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🗄️ MaxScale — San Lorenzo (8990)",
+			"item": [
+				{
+					"name": "Servers (topología DB)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8990/v1/servers",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8990",
+							"path": ["v1", "servers"]
+						}
+					}
+				},
+				{
+					"name": "Monitors",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8990/v1/monitors",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8990",
+							"path": ["v1", "monitors"]
+						}
+					}
+				},
+				{
+					"name": "Services",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8990/v1/services",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8990",
+							"path": ["v1", "services"]
+						}
+					}
+				},
+				{
+					"name": "MaxScale status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8990/v1/maxscale",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8990",
+							"path": ["v1", "maxscale"]
+						}
+					}
+				},
+				{
+					"name": "⚠️ Switchover (mover Master)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8990/v1/maxscale/modules/mariadbmon/switchover?Replication-Monitor",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8990",
+							"path": ["v1", "maxscale", "modules", "mariadbmon", "switchover"],
+							"query": [{"key": "Replication-Monitor", "value": null}]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "📋 Vista rápida — Estado completo",
+			"item": [
+				{
+					"name": "¿Quién es ACTIVE? (Hornos)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8011/role",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8011",
+							"path": ["role"]
+						}
+					}
+				},
+				{
+					"name": "¿Quién es ACTIVE? (San Lorenzo)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8012/role",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8012",
+							"path": ["role"]
+						}
+					}
+				},
+				{
+					"name": "¿Dónde está el Master DB?",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{"key": "username", "value": "admin", "type": "string"},
+								{"key": "password", "value": "mariadb", "type": "string"}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8989/v1/servers",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8989",
+							"path": ["v1", "servers"]
+						}
+					}
+				},
+				{
+					"name": "Healthcheck Hornos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8001",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Healthcheck San Lorenzo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Airflow Health (via GSLB)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v2/monitor/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "v2", "monitor", "health"]
+						}
+					}
+				}
+			]
+		}
+	]
+}

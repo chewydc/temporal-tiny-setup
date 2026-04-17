@@ -252,13 +252,16 @@ class SiteController:
                 should_be_active = False
 
                 if critical_healthy:
-                    if PREFERRED_REGION:
+                    if site_state["role"] == "active":
+                        # Ya soy ACTIVE y estoy sana → me mantengo (sin retorno automático)
+                        should_be_active = True
+                    elif PREFERRED_REGION:
                         # Soy preferida y estoy sana → ACTIVE
                         should_be_active = True
                     elif not peer_critical_healthy:
                         # No soy preferida pero el peer está caído → ACTIVE
                         should_be_active = True
-                    # else: no soy preferida y el peer está sano → PASSIVE
+                    # else: no soy preferida, peer sano, no soy active → PASSIVE
 
                 # ─── 3. CONTADORES CON HYSTERESIS ───
                 if should_be_active:
