@@ -252,16 +252,15 @@ class SiteController:
                 should_be_active = False
 
                 if critical_healthy:
-                    if site_state["role"] == "active":
-                        # Ya soy ACTIVE y estoy sana → me mantengo (sin retorno automático)
-                        should_be_active = True
-                    elif PREFERRED_REGION:
-                        # Soy preferida y estoy sana → ACTIVE
+                    if PREFERRED_REGION:
+                        # Soy preferida y estoy sana → ACTIVE (siempre)
                         should_be_active = True
                     elif not peer_critical_healthy:
                         # No soy preferida pero el peer está caído → ACTIVE
                         should_be_active = True
-                    # else: no soy preferida, peer sano, no soy active → PASSIVE
+                    # else: no soy preferida y el peer está sano → PASSIVE
+                    # (la preferida gana, esto no es "retorno automático"
+                    #  sino resolución de quién manda cuando ambas están sanas)
 
                 # ─── 3. CONTADORES CON HYSTERESIS ───
                 if should_be_active:
@@ -302,14 +301,14 @@ class SiteController:
                         site_state["last_transition"] = datetime.now().isoformat()
                         site_state["transition_reason"] = reason
 
-                # ─── 5. SAFETY CHECKS ───
-                if site_state["role"] == "active" and not site_state["scheduler_running"]:
-                    paused = await self.is_container_paused(SCHEDULER_CONTAINER)
-                    if paused is True:
-                        logger.warning("[SAFETY] Active pero scheduler pausado → corrigiendo")
-                        await self.start_scheduler()
+                # ─── 5. SAFETY CHECKS (contra estado real del container) ───
+                scheduler_paused = await self.is_container_paused(SCHEDULER_CONTAINER)
 
-                if site_state["role"] == "passive" and site_state["scheduler_running"]:
+                if site_state["role"] == "active" and scheduler_paused is True:
+                    logger.warning("[SAFETY] Active pero scheduler pausado → corrigiendo")
+                    await self.start_scheduler()
+
+                if site_state["role"] == "passive" and scheduler_paused is False:
                     logger.warning("[SAFETY] Passive pero scheduler corriendo → corrigiendo")
                     await self.stop_scheduler()
 
